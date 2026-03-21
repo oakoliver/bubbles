@@ -1046,12 +1046,12 @@ export class Model {
       this._cache = new WrapCache(this.maxHeight);
     }
 
-    if (typeof msg === 'object' && msg !== null && 'type' in msg) {
-      const m = msg as { type: string; text?: string; content?: string; [k: string]: any };
+    if (typeof msg === 'object' && msg !== null && ('type' in msg || '_tag' in msg)) {
+      const m = msg as { type?: string; _tag?: string; text?: string; content?: string; [k: string]: any };
 
       if (m.type === 'paste') {
         this._insertRunesFromUserInput([...(m.content ?? '')]);
-      } else if (m.type === 'keyPress') {
+      } else if (m.type === 'keyPress' || (m as any)._tag === 'KeyPressMsg') {
         const km = this.keyMap;
 
         if (matches(m, km.deleteAfterCursor)) {

@@ -1095,9 +1095,9 @@ export class Model {
     const cmds: (Cmd | null)[] = [];
     const m = msg as Record<string, unknown>;
 
-    if (m && typeof m === 'object' && 'type' in m) {
+    if (m && typeof m === 'object' && ('type' in m || '_tag' in m)) {
       // ForceQuit
-      if (m.type === 'keyPress' && matches(msg, this.keyMap.forceQuit)) {
+      if ((m.type === 'keyPress' || m._tag === 'KeyPressMsg') && matches(msg, this.keyMap.forceQuit)) {
         return [this, Quit];
       }
 
@@ -1131,7 +1131,7 @@ export class Model {
 
   private _handleBrowsing(msg: Msg): Cmd | null {
     const m = msg as Record<string, unknown>;
-    if (m && typeof m === 'object' && m.type === 'keyPress') {
+    if (m && typeof m === 'object' && (m.type === 'keyPress' || m._tag === 'KeyPressMsg')) {
       // Note: clear filter before quit (both map to escape by default)
       if (matches(msg, this.keyMap.clearFilter)) {
         this._resetFiltering();
@@ -1175,7 +1175,7 @@ export class Model {
     const cmds: (Cmd | null)[] = [];
     const m = msg as Record<string, unknown>;
 
-    if (m && typeof m === 'object' && m.type === 'keyPress') {
+    if (m && typeof m === 'object' && (m.type === 'keyPress' || m._tag === 'KeyPressMsg')) {
       if (matches(msg, this.keyMap.cancelWhileFiltering)) {
         this._resetFiltering();
         this.keyMap.filter.setEnabled(true);

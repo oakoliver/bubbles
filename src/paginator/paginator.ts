@@ -140,9 +140,9 @@ export class Model {
 
   /** Update binds keystrokes to pagination. */
   update(msg: Msg): [Model, Cmd | null] {
-    if (typeof msg === 'object' && msg !== null && 'type' in msg) {
-      const m = msg as { type: string; toString(): string };
-      if (m.type === 'keyPress') {
+    if (typeof msg === 'object' && msg !== null && ('type' in msg || '_tag' in msg)) {
+      const m = msg as { type?: string; _tag?: string; toString(): string };
+      if (m.type === 'keyPress' || (m as any)._tag === 'KeyPressMsg') {
         if (matches(m, this.keyMap.nextPage)) {
           this.nextPage();
         } else if (matches(m, this.keyMap.prevPage)) {

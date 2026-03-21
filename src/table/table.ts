@@ -189,7 +189,7 @@ export class Model {
       return [this, null];
     }
 
-    if (msg && typeof msg === 'object' && 'type' in msg && (msg as any).type === 'keyPress') {
+    if (msg && typeof msg === 'object' && ('type' in msg && (msg as any).type === 'keyPress' || (msg as any)._tag === 'KeyPressMsg')) {
       const km = this.keyMap;
 
       if (matches(msg, km.lineUp)) {

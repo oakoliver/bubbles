@@ -427,7 +427,7 @@ export class Model {
     }
 
     // Check for keypress
-    const isKey = msg && typeof msg === 'object' && 'type' in msg && (msg as any).type === 'keyPress';
+    const isKey = msg && typeof msg === 'object' && ('type' in msg && (msg as any).type === 'keyPress' || (msg as any)._tag === 'KeyPressMsg');
 
     // Check for suggestion acceptance first (before other key handling)
     if (isKey && matches(msg, this.keyMap.acceptSuggestion)) {

@@ -308,7 +308,7 @@ export class Model {
 
   update(msg: Msg): [Model, Cmd | null] {
     const m = msg as Record<string, unknown>;
-    if (!m || typeof m !== 'object' || !('type' in m)) return [this, null];
+    if (!m || typeof m !== 'object' || (!('type' in m) && !('_tag' in m))) return [this, null];
 
     // ReadDir result
     if (m.type === 'filepicker.readDir') {
@@ -328,7 +328,7 @@ export class Model {
     }
 
     // Key press
-    if (m.type === 'keyPress') {
+    if (m.type === 'keyPress' || m._tag === 'KeyPressMsg') {
       if (matches(msg, this.keyMap.goToTop)) {
         this._selected = 0;
         this._minIdx = 0;
@@ -524,7 +524,7 @@ export class Model {
   private _didSelectFile(msg: Msg): [boolean, string] {
     if (this._files.length === 0) return [false, ''];
     const m = msg as Record<string, unknown>;
-    if (!m || typeof m !== 'object' || m.type !== 'keyPress') return [false, ''];
+    if (!m || typeof m !== 'object' || (m.type !== 'keyPress' && m._tag !== 'KeyPressMsg')) return [false, ''];
 
     if (!matches(msg, this.keyMap.select)) return [false, ''];
 

@@ -582,6 +582,6 @@ function isKeyPressMsg(msg: unknown): msg is { type: 'keyPress'; key: string } {
   return (
     msg != null &&
     typeof msg === 'object' &&
-    (msg as any).type === 'keyPress'
+    ((msg as any).type === 'keyPress' || (msg as any)._tag === 'KeyPressMsg')
   );
 }
