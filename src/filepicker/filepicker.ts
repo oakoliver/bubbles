@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { Cmd, Msg } from '@oakoliver/bubbletea';
-import { newStyle } from '@oakoliver/lipgloss';
+import { newStyle, Right } from '@oakoliver/lipgloss';
 import type { Style } from '@oakoliver/lipgloss';
 
 import { newBinding, withKeys, withHelp, matches } from '../key/key.js';
@@ -56,7 +56,8 @@ interface ReadDirMsg {
 
 interface ErrorMsg {
   readonly type: 'filepicker.error';
-  readonly error: string;
+  readonly id: number;
+  readonly error: Error;
 }
 
 // ── KeyMap ───────────────────────────────────────────────────────────────────
@@ -79,9 +80,9 @@ export function defaultKeyMap(): KeyMap {
     goToLast: newBinding(withKeys('G'), withHelp('G', 'last')),
     down: newBinding(withKeys('j', 'down', 'ctrl+n'), withHelp('j', 'down')),
     up: newBinding(withKeys('k', 'up', 'ctrl+p'), withHelp('k', 'up')),
-    pageUp: newBinding(withKeys('K', 'pageup'), withHelp('pgup', 'page up')),
-    pageDown: newBinding(withKeys('J', 'pagedown'), withHelp('pgdown', 'page down')),
-    back: newBinding(withKeys('h', 'backspace', 'left', 'escape'), withHelp('h', 'back')),
+    pageUp: newBinding(withKeys('K', 'pgup'), withHelp('pgup', 'page up')),
+    pageDown: newBinding(withKeys('J', 'pgdown'), withHelp('pgdown', 'page down')),
+    back: newBinding(withKeys('h', 'backspace', 'left', 'esc'), withHelp('h', 'back')),
     open: newBinding(withKeys('l', 'right', 'enter'), withHelp('l', 'open')),
     select: newBinding(withKeys('enter'), withHelp('enter', 'select')),
   };
@@ -114,7 +115,7 @@ export function defaultStyles(): Styles {
     disabledSelected: newStyle().foreground('247'),
     permission: newStyle().foreground('244'),
     selected: newStyle().foreground('212').bold(true),
-    fileSize: newStyle().foreground('240').width(fileSizeWidth),
+    fileSize: newStyle().foreground('240').width(fileSizeWidth).align(Right),
     emptyDirectory: newStyle()
       .foreground('240')
       .paddingLeft(paddingLeft)
@@ -132,9 +133,25 @@ class Stack {
   length(): number { return this._data.length; }
 }
 
-/** Check if a file is hidden (starts with '.') — Unix convention. */
+/** Reports whether a filename is hidden on Unix-like platforms. */
 function isHidden(name: string): boolean {
   return name.startsWith('.');
+}
+
+/** Compares Unicode names in the byte order used by Go's UTF-8 strings. */
+function compareUtf8(left: string, right: string): number {
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftCodePoint = left.codePointAt(leftIndex)!;
+    const rightCodePoint = right.codePointAt(rightIndex)!;
+    if (leftCodePoint !== rightCodePoint) return leftCodePoint - rightCodePoint;
+    leftIndex += leftCodePoint > 0xffff ? 2 : 1;
+    rightIndex += rightCodePoint > 0xffff ? 2 : 1;
+  }
+  if (leftIndex < left.length) return 1;
+  if (rightIndex < right.length) return -1;
+  return 0;
 }
 
 /** Human-readable file size (e.g. "1.2kB", "3.4MB"). */
@@ -157,12 +174,7 @@ function modeToString(mode: number, isDir: boolean, isSymlink: boolean): string 
 
 /** Read directory entries, sorted: directories first, then alphabetical. */
 function readDirEntries(dirPath: string, showHidden: boolean): DirEntry[] {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   const result: DirEntry[] = [];
   for (const entry of entries) {
@@ -176,18 +188,7 @@ function readDirEntries(dirPath: string, showHidden: boolean): DirEntry[] {
     }
 
     const isLink = stat.isSymbolicLink();
-    let isDir = entry.isDirectory();
-
-    // Resolve symlinks to determine if they point to directories
-    if (isLink) {
-      try {
-        const realPath = fs.realpathSync(path.join(dirPath, entry.name));
-        const realStat = fs.statSync(realPath);
-        if (realStat.isDirectory()) isDir = true;
-      } catch {
-        // broken symlink — treat as file
-      }
-    }
+    const isDir = entry.isDirectory();
 
     result.push({
       name: entry.name,
@@ -200,8 +201,8 @@ function readDirEntries(dirPath: string, showHidden: boolean): DirEntry[] {
 
   // Sort: directories first, then alphabetical
   result.sort((a, b) => {
-    if (a.isDir === b.isDir) return a.name.localeCompare(b.name);
-    return a.isDir ? -1 : 1;
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    return compareUtf8(a.name, b.name);
   });
 
   return result;
@@ -226,6 +227,8 @@ export class Model {
   dirAllowed: boolean;
   fileAllowed: boolean;
   fileSelected: string;
+  /** Most recent directory read error, cleared after a successful read. */
+  error: Error | null;
   cursor: string;
   autoHeight: boolean;
 
@@ -250,6 +253,7 @@ export class Model {
     this.dirAllowed = false;
     this.fileAllowed = true;
     this.fileSelected = '';
+    this.error = null;
     this.autoHeight = true;
     this.keyMap = defaultKeyMap();
     this.styles = defaultStyles();
@@ -279,11 +283,21 @@ export class Model {
 
   private _readDirCmd(dirPath: string, showHidden: boolean): Cmd {
     const id = this._id;
-    return () => Promise.resolve({
-      type: 'filepicker.readDir',
-      id,
-      entries: readDirEntries(dirPath, showHidden),
-    } as ReadDirMsg);
+    return (): ReadDirMsg | ErrorMsg => {
+      try {
+        return {
+          type: 'filepicker.readDir',
+          id,
+          entries: readDirEntries(dirPath, showHidden),
+        };
+      } catch (error) {
+        return {
+          type: 'filepicker.error',
+          id,
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
+      }
+    };
   }
 
   private _pushView(selected: number, minimum: number, maximum: number): void {
@@ -314,15 +328,29 @@ export class Model {
     if (m.type === 'filepicker.readDir') {
       const rdm = msg as ReadDirMsg;
       if (rdm.id !== this._id) return [this, null];
+      this.error = null;
       this._files = rdm.entries;
       this._maxIdx = Math.max(this._maxIdx, this._height - 1);
       return [this, null];
     }
 
+    // ReadDir failure
+    if (m.type === 'filepicker.error') {
+      const errorMsg = msg as ErrorMsg;
+      if (errorMsg.id !== this._id) return [this, null];
+      this.error = errorMsg.error;
+      this._files = [];
+      this._selected = 0;
+      this._minIdx = 0;
+      this._maxIdx = Math.max(0, this._height - 1);
+      return [this, null];
+    }
+
     // Window size
-    if (m.type === 'windowSize') {
-      const wsm = msg as { type: string; height: number };
-      if (this.autoHeight) this.setHeight(wsm.height - marginBottom);
+    if (m.type === 'windowSize' || m._tag === 'WindowSizeMsg') {
+      const height = m.height;
+      if (typeof height !== 'number') return [this, null];
+      if (this.autoHeight) this.setHeight(height - marginBottom);
       this._maxIdx = this._height - 1;
       return [this, null];
     }

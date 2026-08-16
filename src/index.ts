@@ -141,6 +141,7 @@ export {
   defaultKeyMap as viewportDefaultKeyMap,
   withWidth as withViewportWidth,
   withHeight as withViewportHeight,
+  noGutter as viewportNoGutter,
 } from './viewport/viewport.js';
 export type {
   Option as ViewportOption,
@@ -181,6 +182,7 @@ export {
   defaultDarkStyles as textInputDefaultDarkStyles,
   defaultLightStyles as textInputDefaultLightStyles,
   textInputBlink,
+  paste as textInputPaste,
 } from './textinput/textinput.js';
 export type {
   ValidateFunc,
@@ -206,6 +208,7 @@ export {
   defaultStyles as textareaDefaultStyles,
   defaultDarkStyles as textareaDefaultDarkStyles,
   defaultLightStyles as textareaDefaultLightStyles,
+  textareaBlink,
   paste as textareaPaste,
 } from './textarea/textarea.js';
 export type {

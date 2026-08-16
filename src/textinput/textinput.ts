@@ -11,13 +11,14 @@
  * - Horizontal scrolling viewport
  * - Focused / Blurred styling
  *
- * Note: Clipboard paste and real cursor are not yet ported.
+ * Clipboard paste uses the host platform's native clipboard command. Real
+ * terminal cursor metadata is unavailable in the current Bubble Tea peer API.
  *
  * @module
  */
 
-import type { Cmd, Msg } from '@oakoliver/bubbletea';
-import { Batch } from '@oakoliver/bubbletea';
+import type { Cmd, Cursor, Msg } from '@oakoliver/bubbletea';
+import { Batch, CursorShape, NewCursor } from '@oakoliver/bubbletea';
 import { newStyle, stringWidth } from '@oakoliver/lipgloss';
 import type { Style } from '@oakoliver/lipgloss';
 import { newBinding, withKeys, matches } from '../key/key.js';
@@ -30,6 +31,7 @@ import {
 } from '../cursor/cursor.js';
 import { newSanitizer, replaceTabs, replaceNewlines } from '../internal/runeutil.js';
 import type { Sanitizer } from '../internal/runeutil.js';
+import { readClipboard } from '../internal/clipboard.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,6 +82,7 @@ export interface StyleState {
 /** CursorStyle is the style for virtual cursors. */
 export interface CursorStyle {
   color: string | null;
+  shape?: CursorShape;
   blink: boolean;
   blinkSpeed: number; // ms
 }
@@ -101,6 +104,18 @@ interface PasteMsg {
 interface PasteErrMsg {
   type: 'textinput.pasteErr';
   error: string;
+}
+
+/** Reads text from the system clipboard for insertion by the update loop. */
+export async function paste(): Promise<Msg> {
+  try {
+    return { type: 'textinput.paste', content: await readClipboard() } as PasteMsg;
+  } catch (error) {
+    return {
+      type: 'textinput.pasteErr',
+      error: error instanceof Error ? error.message : String(error),
+    } as PasteErrMsg;
+  }
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -146,6 +161,7 @@ export function defaultStyles(isDark: boolean): Styles {
     },
     cursor: {
       color: '7',
+      shape: CursorShape.Block,
       blink: true,
       blinkSpeed: 0, // use default
     },
@@ -425,6 +441,7 @@ export class Model {
     if (!this._focus) {
       return [this, null];
     }
+    const cmds: Cmd[] = [];
 
     // Check for keypress
     const isKey = msg && typeof msg === 'object' && ('type' in msg && (msg as any).type === 'keyPress' || (msg as any)._tag === 'KeyPressMsg');
@@ -481,7 +498,7 @@ export class Model {
       } else if (matches(msg, km.deleteBeforeCursor)) {
         this.deleteBeforeCursor();
       } else if (matches(msg, km.paste)) {
-        // Clipboard paste not ported — no-op
+        cmds.push(paste);
       } else if (matches(msg, km.deleteWordForward)) {
         this.deleteWordForward();
       } else if (matches(msg, km.nextSuggestion)) {
@@ -499,17 +516,20 @@ export class Model {
       this.updateSuggestions();
     }
 
-    // Handle paste messages
-    if (msg && typeof msg === 'object' && 'type' in msg) {
-      const m = msg as any;
-      if (m.type === 'textinput.paste' && typeof m.content === 'string') {
+    // Handle host clipboard and bracketed-paste messages.
+    if (msg && typeof msg === 'object') {
+      const m = msg as Record<string, unknown>;
+      if (
+        (m.type === 'textinput.paste' || m.type === 'paste' || m._tag === 'PasteMsg')
+        && typeof m.content === 'string'
+      ) {
         this.insertRunesFromUserInput([...m.content]);
-      } else if (m.type === 'textinput.pasteErr') {
+        this.updateSuggestions();
+      } else if (m.type === 'textinput.pasteErr' && typeof m.error === 'string') {
         this.err = m.error;
       }
     }
 
-    const cmds: Cmd[] = [];
 
     if (this._useVirtualCursor) {
       const [_, cmd] = this._virtualCursor.update(msg);
@@ -577,6 +597,26 @@ export class Model {
     }
 
     return this.promptView() + v;
+  }
+
+  /**
+   * Returns real-terminal cursor metadata when virtual cursor rendering is
+   * disabled and the input is focused.
+   */
+  cursor(): Cursor | null {
+    if (this._useVirtualCursor || !this.focused()) return null;
+
+    const promptWidth = stringWidth(this.promptView());
+    const visibleValue = this._value.slice(this._offset, this.position()).join('');
+    const visiblePosition = stringWidth(this.echoTransform(visibleValue));
+    let xOffset = visiblePosition + promptWidth;
+    if (this._width > 0) xOffset = Math.min(xOffset, this._width + promptWidth);
+
+    const cursor = NewCursor(xOffset, 0);
+    cursor.blink = this._styles.cursor.blink;
+    cursor.color = this._styles.cursor.color;
+    cursor.shape = this._styles.cursor.shape ?? CursorShape.Block;
+    return cursor;
   }
 
   // ── Private ─────────────────────────────────────────────────────────────

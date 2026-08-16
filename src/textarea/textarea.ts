@@ -18,8 +18,8 @@
  * @module
  */
 
-import type { Cmd, Msg } from '@oakoliver/bubbletea';
-import { Batch } from '@oakoliver/bubbletea';
+import type { Cmd, Cursor, Msg } from '@oakoliver/bubbletea';
+import { Batch, CursorShape, NewCursor } from '@oakoliver/bubbletea';
 import { newStyle, stringWidth, thickBorder } from '@oakoliver/lipgloss';
 import type { Style } from '@oakoliver/lipgloss';
 import { newBinding, withKeys, withHelp, matches } from '../key/key.js';
@@ -33,6 +33,7 @@ import {
 import { newViewport, Model as ViewportModel } from '../viewport/viewport.js';
 import { newSanitizer } from '../internal/runeutil.js';
 import type { Sanitizer } from '../internal/runeutil.js';
+import { readClipboard } from '../internal/clipboard.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -215,6 +216,8 @@ export function defaultKeyMap(): KeyMap {
 export interface CursorStyle {
   /** Color for the cursor. ANSI color string (e.g. "7"). */
   color: string;
+  /** Real terminal cursor shape. */
+  shape?: CursorShape;
   /** Whether the cursor should blink. */
   blink: boolean;
   /** Blink speed in milliseconds (0 = use default). Only for virtual cursor. */
@@ -295,7 +298,7 @@ export function defaultStyles(isDark: boolean): Styles {
   return {
     focused,
     blurred,
-    cursor: { color: '7', blink: true, blinkSpeed: 0 },
+    cursor: { color: '7', shape: CursorShape.Block, blink: true, blinkSpeed: 0 },
   };
 }
 
@@ -339,11 +342,18 @@ class WrapCache {
   }
 }
 
-// ── Paste stub ──────────────────────────────────────────────────────────────
+// ── Clipboard paste ─────────────────────────────────────────────────────────
 
-/** Paste command (no-op stub — clipboard not available in pure TS). */
-export function paste(): Msg {
-  return { type: 'textarea.pasteErr', error: 'clipboard not available' };
+/** Reads text from the system clipboard for insertion by the update loop. */
+export async function paste(): Promise<Msg> {
+  try {
+    return { type: 'textarea.paste', content: await readClipboard() };
+  } catch (error) {
+    return {
+      type: 'textarea.pasteErr',
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
 }
 
 // ── Model ───────────────────────────────────────────────────────────────────
@@ -376,6 +386,15 @@ export class Model {
 
   /** Maximum width in columns (0 = no limit). */
   maxWidth: number = DEFAULT_MAX_WIDTH;
+
+  /** Automatically grows and shrinks the visible height to fit content. */
+  dynamicHeight: boolean = false;
+
+  /** Minimum visible height while dynamicHeight is enabled. */
+  minHeight: number = 0;
+
+  /** Maximum number of visual content rows (0 = legacy maxHeight guard). */
+  maxContentHeight: number = 0;
 
   // ── Private fields ──────────────────────────────────────────────────────
 
@@ -424,6 +443,9 @@ export class Model {
   }
 
   // ── Style getters/setters ───────────────────────────────────────────────
+
+  /** Returns the current styles. */
+  styles(): Styles { return this._styles; }
 
   /** Returns the current styles. */
   getStyles(): Styles { return this._styles; }
@@ -479,11 +501,13 @@ export class Model {
   /** Inserts a string at the cursor position. */
   insertString(s: string): void {
     this._insertRunesFromUserInput([...s]);
+    this._recalculateHeight();
   }
 
   /** Inserts a single character at the cursor position. */
   insertRune(r: string): void {
     this._insertRunesFromUserInput([r]);
+    this._recalculateHeight();
   }
 
   private _insertRunesFromUserInput(runes: string[]): void {
@@ -516,6 +540,14 @@ export class Model {
     if (MAX_LINES > 0 && this._value.length + lines.length - 1 > MAX_LINES) {
       const allowedHeight = Math.max(0, MAX_LINES - this._value.length + 1);
       lines.splice(allowedHeight);
+    }
+
+    if (this.maxContentHeight > 0) {
+      const budget = this.maxContentHeight - this._totalVisualLines();
+      while (lines.length > 1 && this._visualLinesForInsert(lines) > budget) {
+        lines.pop();
+      }
+      if (this._visualLinesForInsert(lines) > budget) return;
     }
 
     if (lines.length === 0) return;
@@ -618,6 +650,7 @@ export class Model {
     this._row = 0;
     this._viewport.gotoTop();
     this.setCursorColumn(0);
+    this._recalculateHeight();
   }
 
   // ── Word ────────────────────────────────────────────────────────────────
@@ -942,6 +975,9 @@ export class Model {
 
   // ── Width / Height ──────────────────────────────────────────────────────
 
+  /** Upstream-compatible width accessor. */
+  width(): number { return this._width; }
+
   /** Returns the width of the textarea. */
   getWidth(): number { return this._width; }
 
@@ -1002,6 +1038,7 @@ export class Model {
 
     this._viewport.setWidth(inputWidth - reservedOuter);
     this._width = inputWidth - reservedOuter - reservedInner;
+    this._recalculateHeight();
   }
 
   /** Sets a dynamic prompt function. */
@@ -1009,6 +1046,9 @@ export class Model {
     this._promptFunc = fn;
     this._promptWidth = promptWidth;
   }
+
+  /** Upstream-compatible height accessor. */
+  height(): number { return this._height; }
 
   /** Returns the current height of the textarea. */
   getHeight(): number { return this._height; }
@@ -1047,11 +1087,16 @@ export class Model {
     }
 
     if (typeof msg === 'object' && msg !== null && ('type' in msg || '_tag' in msg)) {
-      const m = msg as { type?: string; _tag?: string; text?: string; content?: string; [k: string]: any };
+      const m = msg as Record<string, unknown>;
 
-      if (m.type === 'paste') {
-        this._insertRunesFromUserInput([...(m.content ?? '')]);
-      } else if (m.type === 'keyPress' || (m as any)._tag === 'KeyPressMsg') {
+      if (
+        (m.type === 'textarea.paste' || m.type === 'paste' || m._tag === 'PasteMsg')
+        && typeof m.content === 'string'
+      ) {
+        this._insertRunesFromUserInput([...m.content]);
+      } else if (m.type === 'textarea.pasteErr' && m.error instanceof Error) {
+        this.err = m.error;
+      } else if (m.type === 'keyPress' || m._tag === 'KeyPressMsg') {
         const km = this.keyMap;
 
         if (matches(m, km.deleteAfterCursor)) {
@@ -1103,9 +1148,7 @@ export class Model {
             this._deleteWordRight();
           }
         } else if (matches(m, km.insertNewline)) {
-          if (this.maxHeight > 0 && this._value.length >= this.maxHeight) {
-            return [this, null];
-          }
+          if (this._atContentLimit()) return [this, null];
           this._col = clamp(this._col, 0, this._value[this._row].length);
           this._splitLine(this._row, this._col);
         } else if (matches(m, km.lineEnd)) {
@@ -1119,7 +1162,7 @@ export class Model {
         } else if (matches(m, km.wordForward)) {
           this._wordRight();
         } else if (matches(m, km.paste)) {
-          return [this, paste as unknown as Cmd];
+          cmds.push(paste);
         } else if (matches(m, km.characterBackward)) {
           this._characterLeft(false);
         } else if (matches(m, km.linePrevious)) {
@@ -1144,12 +1187,14 @@ export class Model {
           this._transposeLeft();
         } else {
           // Default: insert typed text
-          if (m.text) {
+          if (typeof m.text === 'string' && m.text.length > 0) {
             this._insertRunesFromUserInput([...m.text]);
           }
         }
       }
     }
+    this._recalculateHeight();
+
 
     // Update viewport content
     const viewContent = this._renderView();
@@ -1207,7 +1252,7 @@ export class Model {
 
         // Prompt
         const prompt = this._promptView(displayLine);
-        parts.push(style.render(computedPrompt(styles).render(prompt)));
+        parts.push(style.render(prompt));
         displayLine++;
 
         // Line number
@@ -1273,18 +1318,46 @@ export class Model {
     return this._activeStyle().base.render(viewStr);
   }
 
+  /**
+   * Returns real-terminal cursor metadata when virtual cursor rendering is
+   * disabled and the textarea is focused.
+   */
+  cursor(): Cursor | null {
+    if (this._useVirtualCursor || !this.focused()) return null;
+
+    const info = this.lineInfo();
+    const base = this._activeStyle().base;
+    const xOffset = info.charOffset
+      + stringWidth(this._promptView(0))
+      + stringWidth(this._lineNumberView(0, false))
+      + base.getMarginLeft()
+      + base.getPaddingLeft()
+      + base.getBorderLeftSize();
+    const yOffset = this._cursorLineNumber()
+      - this._viewport.yOffset()
+      + base.getMarginTop()
+      + base.getPaddingTop()
+      + base.getBorderTopSize();
+
+    const cursor = NewCursor(xOffset, yOffset);
+    cursor.blink = this._styles.cursor.blink;
+    cursor.color = this._styles.cursor.color;
+    cursor.shape = this._styles.cursor.shape ?? CursorShape.Block;
+    return cursor;
+  }
+
   /** Renders a single line of the prompt. */
   private _promptView(displayLine: number): string {
     let prompt = this.prompt;
-    if (this._promptFunc === null) return prompt;
-
-    prompt = this._promptFunc({
-      lineNumber: displayLine,
-      focused: this._focus,
-    });
-    const width = stringWidth(prompt);
-    if (width < this._promptWidth) {
-      prompt = ' '.repeat(this._promptWidth - width) + prompt;
+    if (this._promptFunc !== null) {
+      prompt = this._promptFunc({
+        lineNumber: displayLine,
+        focused: this._focus,
+      });
+      const width = stringWidth(prompt);
+      if (width < this._promptWidth) {
+        prompt = ' '.repeat(this._promptWidth - width) + prompt;
+      }
     }
     return computedPrompt(this._activeStyle()).render(prompt);
   }
@@ -1331,7 +1404,7 @@ export class Model {
 
       // Prompt
       const prompt = this._promptView(i);
-      parts.push(lineStyle.render(computedPrompt(styles).render(prompt)));
+      parts.push(lineStyle.render(prompt));
 
       // Line numbers
       if (this.showLineNumbers) {
@@ -1386,6 +1459,61 @@ export class Model {
     }
     line += this.lineInfo().rowOffset;
     return line;
+  }
+
+  /** Total display rows across all logical lines, including soft wraps. */
+  private _totalVisualLines(): number {
+    let total = 0;
+    for (const line of this._value) {
+      total += this._memoizedWrap(line, this._width).length;
+    }
+    return total;
+  }
+
+  /** Applies dynamic-height constraints after content or width changes. */
+  private _recalculateHeight(): void {
+    if (!this.dynamicHeight) return;
+
+    const minimum = Math.max(this.minHeight, MIN_HEIGHT);
+    const total = this._totalVisualLines();
+    let height = Math.max(total, minimum);
+    if (this.maxHeight > 0) height = Math.min(height, this.maxHeight);
+
+    const maxOffset = total - height;
+    if (this._viewport.yOffset() > maxOffset) {
+      this._viewport.setYOffset(Math.max(0, maxOffset));
+    }
+    this.setHeight(height);
+  }
+
+  private _atContentLimit(): boolean {
+    if (this.maxContentHeight > 0) {
+      return this._totalVisualLines() >= this.maxContentHeight;
+    }
+    return this.maxHeight > 0 && this._value.length >= this.maxHeight;
+  }
+
+  /** Estimates the visual-row delta from an insertion at the cursor. */
+  private _visualLinesForInsert(lines: string[][]): number {
+    if (lines.length === 0) return 0;
+
+    const currentRowVisual = this._memoizedWrap(this._value[this._row], this._width).length;
+    let merged = [
+      ...this._value[this._row].slice(0, this._col),
+      ...lines[0],
+    ];
+    if (lines.length === 1) {
+      merged = [...merged, ...this._value[this._row].slice(this._col)];
+    }
+    let delta = this._memoizedWrap(merged, this._width).length - currentRowVisual;
+
+    for (let i = 0; i < lines.length; i++) {
+      const content = i === lines.length - 1
+        ? [...lines[i], ...this._value[this._row].slice(this._col)]
+        : lines[i];
+      delta += this._memoizedWrap(content, this._width).length;
+    }
+    return delta;
   }
 
   // ── Line merge/split ────────────────────────────────────────────────────
@@ -1444,6 +1572,11 @@ export class Model {
 /** Creates a new textarea model with default settings. */
 export function newTextarea(): Model {
   return new Model();
+}
+
+/** Returns the initial blink message for the textarea's virtual cursor. */
+export function textareaBlink(): Msg {
+  return cursorBlink();
 }
 
 // ── Helper functions (module-level) ─────────────────────────────────────────

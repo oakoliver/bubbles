@@ -10,16 +10,15 @@
  * - Gutter functions (e.g. line numbers)
  * - Vim-style and pager-style keybindings
  *
- * Note: Highlight/search features are not yet ported (require uniseg).
- *
  * @module
  */
 
 import type { Cmd, Msg } from '@oakoliver/bubbletea';
-import { newStyle, stringWidth } from '@oakoliver/lipgloss';
-import type { Style } from '@oakoliver/lipgloss';
+import { KeyMod, MouseButton } from '@oakoliver/bubbletea';
+import { newRange, newStyle, styleRanges } from '@oakoliver/lipgloss';
+import type { Range, Style } from '@oakoliver/lipgloss';
 import { Binding, newBinding, withKeys, withHelp, matches } from '../key/key.js';
-import { cut, stringWidth as ansiStringWidth } from '../internal/ansi.js';
+import { cut, stringWidth as ansiStringWidth, tokenizeAnsi } from '../internal/ansi.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -36,6 +35,9 @@ export type Option = (m: Model) => void;
  */
 export type GutterFunc = (ctx: GutterContext) => string;
 
+/** Default gutter implementation. */
+export const noGutter: GutterFunc = () => '';
+
 /** Context provided to a GutterFunc. */
 export interface GutterContext {
   /** Line index (0-based). */
@@ -44,6 +46,12 @@ export interface GutterContext {
   totalLines: number;
   /** Whether this is a soft-wrapped continuation line. */
   soft: boolean;
+}
+
+interface HighlightInfo {
+  lineStart: number;
+  lineEnd: number;
+  lines: Map<number, readonly [number, number]>;
 }
 
 /** KeyMap defines the keybindings for the viewport. */
@@ -147,12 +155,20 @@ export class Model {
   /** Left gutter function (e.g. line numbers). */
   leftGutterFunc: GutterFunc | null;
 
+  /** Style applied to all configured highlight ranges. */
+  highlightStyle: Style;
+
+  /** Style applied to the currently selected highlight range. */
+  selectedHighlightStyle: Style;
+
   /** Style applied to each line via index. */
   styleLineFunc: ((index: number) => Style) | null;
 
   /** @internal */ private _initialized: boolean;
   /** @internal */ private _lines: string[];
   /** @internal */ private _longestLineWidth: number;
+  /** @internal */ private _highlights: HighlightInfo[];
+  /** @internal */ private _highlightIndex: number;
 
   constructor() {
     this._width = 0;
@@ -167,11 +183,15 @@ export class Model {
     this._horizontalStep = DEFAULT_HORIZONTAL_STEP;
     this.yPosition = 0;
     this.style = newStyle();
-    this.leftGutterFunc = null;
+    this.leftGutterFunc = noGutter;
+    this.highlightStyle = newStyle();
+    this.selectedHighlightStyle = newStyle();
     this.styleLineFunc = null;
     this._initialized = false;
     this._lines = [];
     this._longestLineWidth = 0;
+    this._highlights = [];
+    this._highlightIndex = -1;
   }
 
   /** @internal Initialize defaults. */
@@ -180,7 +200,7 @@ export class Model {
     this.mouseWheelEnabled = true;
     this.mouseWheelDelta = 3;
     this._horizontalStep = DEFAULT_HORIZONTAL_STEP;
-    this.leftGutterFunc = null;
+    this.leftGutterFunc = noGutter;
     this._initialized = true;
   }
 
@@ -239,6 +259,7 @@ export class Model {
     }
 
     this._longestLineWidth = maxLineWidth(this._lines);
+    this.clearHighlights();
 
     if (this.yOffset() > this._maxYOffset()) {
       this.gotoBottom();
@@ -314,11 +335,13 @@ export class Model {
   scrollDown(n: number): void {
     if (this.atBottom() || n === 0 || this._lines.length === 0) return;
     this.setYOffset(this.yOffset() + n);
+    this._highlightIndex = this._findNearestHighlight();
   }
 
   scrollUp(n: number): void {
     if (this.atTop() || n === 0 || this._lines.length === 0) return;
     this.setYOffset(this.yOffset() - n);
+    this._highlightIndex = this._findNearestHighlight();
   }
 
   scrollLeft(n: number): void {
@@ -332,12 +355,60 @@ export class Model {
   gotoTop(): string[] {
     if (this.atTop()) return [];
     this.setYOffset(0);
+    this._highlightIndex = this._findNearestHighlight();
     return this._visibleLines();
   }
 
   gotoBottom(): string[] {
     this.setYOffset(this._maxYOffset());
+    this._highlightIndex = this._findNearestHighlight();
     return this._visibleLines();
+  }
+
+  /** Sets ordered, non-overlapping UTF-8 byte ranges to highlight. */
+  setHighlights(matches: ReadonlyArray<ReadonlyArray<number>>): void {
+    if (matches.length === 0 || this._lines.length === 0) return;
+    this._highlights = parseHighlights(this.getContent(), matches);
+    this._highlightIndex = this._findNearestHighlight();
+    this._showHighlight();
+  }
+
+  /** Removes all configured highlight ranges. */
+  clearHighlights(): void {
+    this._highlights = [];
+    this._highlightIndex = -1;
+  }
+
+  /** Selects and reveals the next highlight, wrapping at the end. */
+  highlightNext(): void {
+    if (this._highlights.length === 0) return;
+    this._highlightIndex = (this._highlightIndex + 1) % this._highlights.length;
+    this._showHighlight();
+  }
+
+  /** Selects and reveals the previous highlight, wrapping at the start. */
+  highlightPrevious(): void {
+    if (this._highlights.length === 0) return;
+    this._highlightIndex = (
+      this._highlightIndex - 1 + this._highlights.length
+    ) % this._highlights.length;
+    this._showHighlight();
+  }
+
+  private _showHighlight(): void {
+    if (this._highlightIndex < 0) return;
+    const highlight = this._highlights[this._highlightIndex];
+    for (let line = highlight.lineStart; line <= highlight.lineEnd; line++) {
+      const range = highlight.lines.get(line);
+      if (range) {
+        this.ensureVisible(line, range[0], range[1]);
+        return;
+      }
+    }
+  }
+
+  private _findNearestHighlight(): number {
+    return this._highlights.findIndex(highlight => highlight.lineStart >= this.yOffset());
   }
 
   /**
@@ -349,15 +420,31 @@ export class Model {
     }
 
     if (isKeyPressMsg(msg)) {
-      const k = { toString: () => msg.key ?? msg.type ?? '' };
-      if (matches(k, this.keyMap.pageDown)) this.pageDown();
-      else if (matches(k, this.keyMap.pageUp)) this.pageUp();
-      else if (matches(k, this.keyMap.halfPageDown)) this.halfPageDown();
-      else if (matches(k, this.keyMap.halfPageUp)) this.halfPageUp();
-      else if (matches(k, this.keyMap.down)) this.scrollDown(1);
-      else if (matches(k, this.keyMap.up)) this.scrollUp(1);
-      else if (matches(k, this.keyMap.left)) this.scrollLeft(this._horizontalStep);
-      else if (matches(k, this.keyMap.right)) this.scrollRight(this._horizontalStep);
+      const key = keyStringer(msg);
+      if (matches(key, this.keyMap.pageDown)) this.pageDown();
+      else if (matches(key, this.keyMap.pageUp)) this.pageUp();
+      else if (matches(key, this.keyMap.halfPageDown)) this.halfPageDown();
+      else if (matches(key, this.keyMap.halfPageUp)) this.halfPageUp();
+      else if (matches(key, this.keyMap.down)) this.scrollDown(1);
+      else if (matches(key, this.keyMap.up)) this.scrollUp(1);
+      else if (matches(key, this.keyMap.left)) this.scrollLeft(this._horizontalStep);
+      else if (matches(key, this.keyMap.right)) this.scrollRight(this._horizontalStep);
+    } else if (isMouseWheelMsg(msg) && this.mouseWheelEnabled) {
+      const shifted = (msg.mod & KeyMod.Shift) !== 0;
+      switch (msg.button) {
+        case MouseButton.WheelDown:
+          shifted ? this.scrollRight(this._horizontalStep) : this.scrollDown(this.mouseWheelDelta);
+          break;
+        case MouseButton.WheelUp:
+          shifted ? this.scrollLeft(this._horizontalStep) : this.scrollUp(this.mouseWheelDelta);
+          break;
+        case MouseButton.WheelLeft:
+          this.scrollLeft(this._horizontalStep);
+          break;
+        case MouseButton.WheelRight:
+          this.scrollRight(this._horizontalStep);
+          break;
+      }
     }
 
     return [this, null];
@@ -455,6 +542,7 @@ export class Model {
     if (total > 0) {
       const bottom = clamp(ridx + maxH, ridx, this._lines.length);
       lines = this._styleLines(this._lines.slice(ridx, bottom), ridx);
+      lines = this._highlightLines(lines, ridx);
     }
 
     // Fill remaining height if needed
@@ -483,6 +571,28 @@ export class Model {
   private _styleLines(lines: string[], offset: number): string[] {
     if (!this.styleLineFunc) return lines;
     return lines.map((line, i) => this.styleLineFunc!(i + offset).render(line));
+  }
+
+  private _highlightLines(lines: string[], offset: number): string[] {
+    if (this._highlights.length === 0) return lines;
+
+    return lines.map((line, index) => {
+      const absoluteLine = index + offset;
+      const ranges: Array<readonly [number, number]> = [];
+      for (const highlight of this._highlights) {
+        const range = highlight.lines.get(absoluteLine);
+        if (range) ranges.push(range);
+      }
+
+      let rendered = renderStyleRanges(line, ranges, this.highlightStyle);
+      if (this._highlightIndex >= 0) {
+        const selected = this._highlights[this._highlightIndex].lines.get(absoluteLine);
+        if (selected) {
+          rendered = renderStyleRanges(rendered, [selected], this.selectedHighlightStyle);
+        }
+      }
+      return rendered;
+    });
   }
 
   private _softWrap(
@@ -578,10 +688,141 @@ function maxLineWidth(lines: string[]): number {
   return result;
 }
 
-function isKeyPressMsg(msg: unknown): msg is { type: 'keyPress'; key: string } {
+interface KeyPressLike {
+  type?: unknown;
+  _tag?: unknown;
+  key?: unknown;
+  toString(): string;
+}
+
+interface MouseWheelLike {
+  button: MouseButton;
+  mod: number;
+}
+
+function isKeyPressMsg(msg: unknown): msg is KeyPressLike {
+  if (msg === null || typeof msg !== 'object') return false;
+  const candidate = msg as Record<string, unknown>;
+  return candidate.type === 'keyPress' || candidate._tag === 'KeyPressMsg';
+}
+
+function keyStringer(msg: KeyPressLike): { toString(): string } {
+  if (msg.toString !== Object.prototype.toString) return msg;
+  const key = typeof msg.key === 'string'
+    ? msg.key
+    : typeof msg.type === 'string' ? msg.type : '';
+  return { toString: () => key };
+}
+
+function isMouseWheelMsg(msg: unknown): msg is MouseWheelLike {
+  if (msg === null || typeof msg !== 'object') return false;
+  const candidate = msg as Record<string, unknown>;
   return (
-    msg != null &&
-    typeof msg === 'object' &&
-    ((msg as any).type === 'keyPress' || (msg as any)._tag === 'KeyPressMsg')
+    (candidate.type === 'mouseWheel' || candidate._tag === 'MouseWheelMsg')
+    && typeof candidate.button === 'number'
+    && typeof candidate.mod === 'number'
   );
+}
+
+function parseHighlights(
+  content: string,
+  matches: ReadonlyArray<ReadonlyArray<number>>,
+): HighlightInfo[] {
+  if (matches.length === 0) return [];
+
+  const encoder = new TextEncoder();
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  const segments: Array<{ text: string; bytes: number; width: number }> = [];
+  for (const token of tokenizeAnsi(content)) {
+    if (token.ansi) {
+      segments.push({ text: token.text, bytes: encoder.encode(token.text).length, width: 0 });
+      continue;
+    }
+    for (const value of segmenter.segment(token.text)) {
+      segments.push({
+        text: value.segment,
+        bytes: encoder.encode(value.segment).length,
+        width: Math.max(1, ansiStringWidth(value.segment)),
+      });
+    }
+  }
+
+  let segmentIndex = 0;
+  let line = 0;
+  let graphemePosition = 0;
+  let previousLinesOffset = 0;
+  let bytePosition = 0;
+  const highlights: HighlightInfo[] = [];
+
+  for (const match of matches) {
+    const byteStart = match[0];
+    const byteEnd = match[1];
+    if (!Number.isInteger(byteStart) || !Number.isInteger(byteEnd)) continue;
+
+    while (byteStart > bytePosition && segmentIndex < segments.length) {
+      const segment = segments[segmentIndex++];
+      if (segment.text === '\n') {
+        previousLinesOffset = graphemePosition + 1;
+        line++;
+      }
+      graphemePosition += segment.width;
+      bytePosition += segment.bytes;
+    }
+
+    const highlight: HighlightInfo = {
+      lineStart: line,
+      lineEnd: line,
+      lines: new Map(),
+    };
+    const graphemeStart = graphemePosition;
+
+    while (byteEnd > bytePosition && segmentIndex < segments.length) {
+      const segment = segments[segmentIndex++];
+      if (segment.text === '\n') {
+        const columnStart = Math.max(0, graphemeStart - previousLinesOffset);
+        const columnEnd = Math.max(
+          graphemePosition - previousLinesOffset + 1,
+          columnStart,
+        );
+        if (columnEnd > columnStart) {
+          highlight.lines.set(line, [columnStart, columnEnd]);
+          highlight.lineEnd = line;
+        }
+        previousLinesOffset = graphemePosition + 1;
+        line++;
+      }
+      graphemePosition += segment.width;
+      bytePosition += segment.bytes;
+    }
+
+    if (bytePosition === byteEnd) {
+      const columnStart = Math.max(0, graphemeStart - previousLinesOffset);
+      const columnEnd = Math.max(graphemePosition - previousLinesOffset, columnStart);
+      if (columnEnd > columnStart) {
+        highlight.lines.set(line, [columnStart, columnEnd]);
+        highlight.lineEnd = line;
+      }
+    }
+    highlights.push(highlight);
+  }
+  return highlights;
+}
+
+function renderStyleRanges(
+  line: string,
+  ranges: ReadonlyArray<readonly [number, number]>,
+  style: Style,
+): string {
+  if (ranges.length === 0) return line;
+
+  const width = ansiStringWidth(line);
+  const styledRanges: Range[] = [];
+  let column = 0;
+  for (const range of ranges) {
+    const start = clamp(range[0], column, width);
+    const end = clamp(range[1], start, width);
+    if (end > start) styledRanges.push(newRange(start, end, style));
+    column = end;
+  }
+  return styleRanges(line, ...styledRanges);
 }

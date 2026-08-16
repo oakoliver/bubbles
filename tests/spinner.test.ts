@@ -99,6 +99,11 @@ describe('Spinner Model', () => {
     expect(msg.id).toBe(s.id());
   });
 
+  test('tick alias returns an upstream-compatible tick message', () => {
+    const s = newSpinner();
+    expect(s.tick()).toMatchObject({ type: 'spinner.tick', id: s.id() });
+  });
+
   test('update advances frame on tick', () => {
     const s = newSpinner();
     const tick = s.tickMsg();

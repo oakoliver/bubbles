@@ -4,6 +4,7 @@
  */
 import { describe, test, expect } from 'bun:test';
 import { Model, newCursor, Mode, blink, modeString } from '../src/cursor/cursor';
+import { BlurMsg, FocusMsg } from '@oakoliver/bubbletea';
 
 describe('Cursor', () => {
   /**
@@ -188,6 +189,16 @@ describe('Cursor', () => {
     expect(cmd).not.toBeNull();
   });
 
+  test('update accepts Bubble Tea v2 focus and blur messages', () => {
+    const m = newCursor();
+    const [, focusCommand] = m.update(new FocusMsg());
+    expect(focusCommand).not.toBeNull();
+    expect(m.isBlinked).toBe(false);
+
+    m.update(new BlurMsg());
+    expect(m.isBlinked).toBe(true);
+  });
+
   test('update ignores blink message with wrong id/tag', () => {
     const m = newCursor();
     m.focus();
@@ -202,6 +213,12 @@ describe('Cursor', () => {
     m.setMode(Mode.CursorStatic);
     const cmd = m.setMode(Mode.CursorBlink);
     expect(cmd).not.toBeNull();
+  });
+
+  test('instance blink alias returns the cursor blink command', () => {
+    const m = newCursor();
+    m.focus();
+    expect(typeof m.blink()).toBe('function');
   });
 
   test('setMode returns null for invalid mode', () => {

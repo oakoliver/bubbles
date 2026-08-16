@@ -1,6 +1,6 @@
 {
   "name": "@oakoliver/bubbles",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Pre-built TUI components for TypeScript — zero-dependency port of Charmbracelet's Bubbles",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -56,14 +56,14 @@
     "url": "https://github.com/oakoliver/bubbles/issues"
   },
   "peerDependencies": {
-    "@oakoliver/lipgloss": "^1.0.0",
-    "@oakoliver/bubbletea": "^1.0.0"
+    "@oakoliver/lipgloss": "^1.1.0",
+    "@oakoliver/bubbletea": "^1.1.0"
   },
   "devDependencies": {
-    "@oakoliver/lipgloss": "^1.0.0",
-    "@oakoliver/bubbletea": "^1.0.0",
+    "@oakoliver/lipgloss": "^1.1.0",
+    "@oakoliver/bubbletea": "^1.1.0",
     "@types/node": "^20",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.28.2",
     "typescript": "^5"
   }
 }

@@ -175,6 +175,11 @@ export class Model {
     return this.style.render(this.spinner.frames[this._frame]);
   }
 
+  /** Returns a tick message that can be used to start the spinner. */
+  tick(): TickMsg {
+    return this.tickMsg();
+  }
+
   /**
    * Tick is the command used to advance the spinner one frame.
    * Use this command to effectively start the spinner.

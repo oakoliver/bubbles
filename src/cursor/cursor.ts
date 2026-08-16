@@ -142,10 +142,15 @@ export class Model {
 
   /** Update updates the cursor. */
   update(msg: Msg): [Model, Cmd | null] {
-    if (typeof msg === 'object' && msg !== null && 'type' in msg) {
-      const m = msg as { type: string; id?: number; tag?: number };
+    if (typeof msg === 'object' && msg !== null) {
+      const m = msg as Record<string, unknown>;
+      const messageType = m.type === 'focus' || m._tag === 'FocusMsg'
+        ? 'focus'
+        : m.type === 'blur' || m._tag === 'BlurMsg'
+          ? 'blur'
+          : m.type;
 
-      switch (m.type) {
+      switch (messageType) {
         case 'cursor.initialBlink': {
           if (this._mode !== Mode.CursorBlink || !this._focus) {
             return [this, null];
@@ -184,6 +189,11 @@ export class Model {
       }
     }
     return [this, null];
+  }
+
+  /** Upstream-compatible alias for the cursor's blink command. */
+  blink(): Cmd | null {
+    return this.blinkCmd();
   }
 
   /** Blink command — manages cursor blinking. */

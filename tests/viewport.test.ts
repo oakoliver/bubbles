@@ -11,8 +11,16 @@ import {
   newViewport,
   withWidth,
   withHeight,
+  noGutter,
 } from '../src/viewport/viewport.js';
-import { stringWidth } from '@oakoliver/lipgloss';
+import { newStyle, stringWidth, stripAnsi } from '@oakoliver/lipgloss';
+import {
+  KeyCode,
+  KeyMod,
+  KeyPressMsg,
+  MouseButton,
+  MouseWheelMsg,
+} from '@oakoliver/bubbletea';
 
 // ── Shared content from Go tests ────────────────────────────────────────────
 
@@ -412,5 +420,87 @@ describe('GetContent', () => {
     const m = newViewport(withHeight(10), withWidth(40));
     m.setContent(textContentList);
     expect(m.getContent()).toBe(textContentList);
+  });
+});
+
+
+describe('v2 viewport parity', () => {
+  test('real Bubble Tea key messages use their canonical key string', () => {
+    const viewport = newViewport(withWidth(20), withHeight(2));
+    viewport.setContent('one\ntwo\nthree');
+
+    viewport.update(new KeyPressMsg({
+      text: '',
+      code: KeyCode.Down,
+      mod: KeyMod.None,
+    }));
+
+    expect(viewport.yOffset()).toBe(1);
+  });
+
+  test('mouse wheel messages scroll vertically', () => {
+    const viewport = newViewport(withWidth(20), withHeight(2));
+    viewport.setContent('one\ntwo\nthree\nfour\nfive');
+
+    viewport.update(new MouseWheelMsg({
+      x: 0,
+      y: 0,
+      button: MouseButton.WheelDown,
+      mod: KeyMod.None,
+    }));
+
+    expect(viewport.yOffset()).toBe(3);
+  });
+
+  test('highlights UTF-8 byte ranges and clears them with new content', () => {
+    const viewport = newViewport(withWidth(30), withHeight(1));
+    viewport.highlightStyle = newStyle().underline(true);
+    const content = 'wide あ after';
+    viewport.setContent(content);
+    const start = Buffer.byteLength('wide あ ');
+    const end = start + Buffer.byteLength('after');
+
+    viewport.setHighlights([[start, end]]);
+    const highlightPrefix = viewport.highlightStyle.render('x').split('x')[0];
+    expect(viewport.view()).toContain(highlightPrefix);
+
+    viewport.setContent(content);
+    expect(viewport.view()).not.toContain(highlightPrefix);
+  });
+
+  test('measures highlight byte ranges against ANSI-styled content', () => {
+    const viewport = newViewport(withWidth(30), withHeight(1));
+    viewport.highlightStyle = newStyle().underline(true);
+    viewport.selectedHighlightStyle = viewport.highlightStyle;
+    const prefix = '\x1b[31m';
+    const highlighted = 'abc';
+    const content = `${prefix}${highlighted}\x1b[0m tail`;
+    viewport.setContent(content);
+    const start = Buffer.byteLength(prefix);
+    const end = start + Buffer.byteLength(highlighted);
+
+    viewport.setHighlights([[start, end]]);
+    const rendered = viewport.view();
+    const highlightPrefix = viewport.highlightStyle.render('x').split('x')[0];
+    expect(rendered).toStartWith(highlightPrefix);
+    expect(stripAnsi(rendered)).toStartWith('abc tail');
+  });
+
+  test('highlight navigation wraps and reveals matches', () => {
+    const viewport = newViewport(withWidth(20), withHeight(1));
+    viewport.selectedHighlightStyle = newStyle().reverse(true);
+    viewport.setContent('abc\ndef');
+    viewport.setHighlights([[0, 3], [4, 7]]);
+    const selectedPrefix = viewport.selectedHighlightStyle.render('x').split('x')[0];
+    expect(viewport.view()).toContain(selectedPrefix);
+    viewport.highlightNext();
+    expect(viewport.yOffset()).toBe(1);
+    expect(viewport.view()).toContain(selectedPrefix);
+    viewport.highlightNext();
+    expect(viewport.yOffset()).toBe(0);
+  });
+
+  test('noGutter is the exported empty gutter', () => {
+    expect(noGutter({ index: 3, totalLines: 10, soft: true })).toBe('');
   });
 });

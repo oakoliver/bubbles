@@ -4,6 +4,13 @@ Pre-built TUI components for TypeScript. A pure TypeScript port of [charmbracele
 
 Built on top of [@oakoliver/bubbletea](https://www.npmjs.com/package/@oakoliver/bubbletea) (Elm Architecture) and [@oakoliver/lipgloss](https://www.npmjs.com/package/@oakoliver/lipgloss) (terminal styling).
 
+Portable API and behavior parity is tracked against upstream
+[`charmbracelet/bubbles` `v2.1.1`](https://github.com/charmbracelet/bubbles/releases/tag/v2.1.1).
+The one platform-specific exclusion is upstream's unexported Windows
+`isHidden(path)` implementation in `filepicker/hidden_windows.go`: Node's
+portable filesystem API does not expose `FILE_ATTRIBUTE_HIDDEN`, so the file
+picker uses the Unix dotfile convention on every platform.
+
 ## Features
 
 - 15 ready-to-use TUI components

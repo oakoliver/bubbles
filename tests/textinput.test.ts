@@ -356,3 +356,61 @@ describe('Validation', () => {
     expect(ti.value()).toBe('123');
   });
 });
+
+describe('Paste parity', () => {
+  test('accepts Bubble Tea bracketed paste messages', () => {
+    const ti = newTextInput();
+    ti.focus();
+
+    ti.update({ _tag: 'PasteMsg', content: 'hello\tworld' });
+
+    expect(ti.value()).toBe('hello world');
+  });
+
+  test('ctrl+v returns a clipboard command', () => {
+    const ti = newTextInput();
+    ti.focus();
+
+    const [, cmd] = ti.update(keyPress('ctrl+v'));
+
+    expect(typeof cmd).toBe('function');
+  });
+});
+
+describe('Real cursor parity', () => {
+  test('returns positioned cursor metadata only when focused and virtual cursor is disabled', () => {
+    const ti = newTextInput();
+    expect(ti.cursor()).toBeNull();
+
+    ti.prompt = '> ';
+    ti.setValue('abc');
+    ti.setCursor(2);
+    ti.setVirtualCursor(false);
+    ti.focus();
+
+    expect(ti.cursor()).toMatchObject({
+      x: 4,
+      y: 0,
+      color: '7',
+      blink: true,
+    });
+    ti.blur();
+    expect(ti.cursor()).toBeNull();
+  });
+
+  test('reports the visible cursor column after horizontal scrolling', () => {
+    const ti = newTextInput();
+    ti.prompt = '';
+    ti.setWidth(5);
+    ti.setValue('abcdefghij');
+    ti.setCursor(9);
+    ti.setVirtualCursor(false);
+    ti.focus();
+
+    expect(ti.cursor()?.x).toBe(4);
+
+    ti.setValue('界ab');
+    ti.setCursor(1);
+    expect(ti.cursor()?.x).toBe(2);
+  });
+});

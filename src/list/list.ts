@@ -153,11 +153,11 @@ export function defaultKeyMap(): KeyMap {
       withHelp('↓/j', 'down'),
     ),
     prevPage: newBinding(
-      withKeys('left', 'h', 'pageup', 'b', 'u'),
+      withKeys('left', 'h', 'pgup', 'b', 'u'),
       withHelp('←/h/pgup', 'prev page'),
     ),
     nextPage: newBinding(
-      withKeys('right', 'l', 'pagedown', 'f', 'd'),
+      withKeys('right', 'l', 'pgdown', 'f', 'd'),
       withHelp('→/l/pgdn', 'next page'),
     ),
     goToStart: newBinding(
@@ -173,11 +173,11 @@ export function defaultKeyMap(): KeyMap {
       withHelp('/', 'filter'),
     ),
     clearFilter: newBinding(
-      withKeys('escape'),
+      withKeys('esc'),
       withHelp('esc', 'clear filter'),
     ),
     cancelWhileFiltering: newBinding(
-      withKeys('escape'),
+      withKeys('esc'),
       withHelp('esc', 'cancel'),
     ),
     acceptWhileFiltering: newBinding(
@@ -193,7 +193,7 @@ export function defaultKeyMap(): KeyMap {
       withHelp('?', 'close help'),
     ),
     quit: newBinding(
-      withKeys('q', 'escape'),
+      withKeys('q', 'esc'),
       withHelp('q', 'quit'),
     ),
     forceQuit: newBinding(withKeys('ctrl+c')),
@@ -318,69 +318,141 @@ export function newDefaultItemStyles(isDark: boolean): DefaultItemStyles {
   };
 }
 
-// ── Fuzzy filter (zero-dependency) ──────────────────────────────────────────
+// ── Fuzzy filter ─────────────────────────────────────────────────────────────
 
-/**
- * Simple fuzzy matching algorithm. Returns ranks sorted by quality.
- * This replaces sahilm/fuzzy used in the Go original.
- */
+const FUZZY_SEPARATORS = '/-_ .\\';
+const LOWERCASE_LETTER = /\p{Ll}/u;
+const UPPERCASE_LETTER = /\p{Lu}/u;
+
+interface ScoredRank extends Rank {
+  score: number;
+}
+
+/** Matches and ranks targets with the same scoring rules as sahilm/fuzzy. */
 export function defaultFilter(term: string, targets: string[]): Rank[] {
-  const results: Array<{ index: number; matchedIndexes: number[]; score: number }> = [];
-  const lowerTerm = term.toLowerCase();
+  return findFuzzy(term, targets)
+    .sort((left, right) => right.score - left.score)
+    .map(({ index, matchedIndexes }) => ({ index, matchedIndexes }));
+}
 
-  for (let i = 0; i < targets.length; i++) {
-    const target = targets[i];
-    const lowerTarget = target.toLowerCase();
-    const matched = fuzzyMatch(lowerTerm, lowerTarget);
-    if (matched) {
-      // Score: prefer earlier matches, consecutive matches, shorter targets
-      let score = 0;
-      for (let j = 0; j < matched.length; j++) {
-        score -= matched[j]; // earlier = better (lower index)
-        if (j > 0 && matched[j] === matched[j - 1] + 1) {
-          score += 10; // consecutive bonus
+/** Matches targets without sorting them by score. */
+export function unsortedFilter(term: string, targets: string[]): Rank[] {
+  return findFuzzy(term, targets)
+    .map(({ index, matchedIndexes }) => ({ index, matchedIndexes }));
+}
+
+function findFuzzy(term: string, targets: string[]): ScoredRank[] {
+  if (term.length === 0) return [];
+
+  const pattern = Array.from(term);
+  const results: ScoredRank[] = [];
+  const foldPatterns = new Map<string, RegExp>();
+  for (let targetIndex = 0; targetIndex < targets.length; targetIndex++) {
+    const nulIndex = targets[targetIndex].indexOf('\0');
+    const target = nulIndex >= 0 ? targets[targetIndex].slice(0, nulIndex) : targets[targetIndex];
+    const candidates = Array.from(target);
+    const byteIndexes: number[] = [];
+    let byteIndex = 0;
+    for (const candidate of candidates) {
+      byteIndexes.push(byteIndex);
+      byteIndex += Buffer.byteLength(candidate);
+    }
+
+    const matchedIndexes: number[] = [];
+    // Scoring follows sahilm/fuzzy's UTF-8 byte offsets, while StyleRunes
+    // consumes JavaScript code-point indexes. Keep both domains explicitly.
+    const matchedCodePointIndexes: number[] = [];
+    let patternIndex = 0;
+    let totalScore = 0;
+    let bestScore = -1;
+    let matchedIndex = -1;
+    let matchedCodePointIndex = -1;
+    let adjacentBonus = 0;
+    let last = '';
+    let lastIndex = 0;
+
+    for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
+      const candidate = candidates[candidateIndex];
+      const currentByteIndex = byteIndexes[candidateIndex];
+
+      if (equalFold(candidate, pattern[patternIndex], foldPatterns)) {
+        let score = 0;
+        if (currentByteIndex === 0) score += 10;
+        if (LOWERCASE_LETTER.test(last) && UPPERCASE_LETTER.test(candidate)) score += 20;
+        if (currentByteIndex !== 0 && FUZZY_SEPARATORS.includes(last)) score += 20;
+        if (matchedIndexes.length > 0) {
+          const lastMatch = matchedIndexes[matchedIndexes.length - 1];
+          const bonus = lastMatch === lastIndex ? adjacentBonus * 2 + 5 : 0;
+          score += bonus;
+          adjacentBonus += bonus;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          matchedIndex = currentByteIndex;
+          matchedCodePointIndex = candidateIndex;
         }
       }
-      score -= target.length; // shorter = better
-      results.push({ index: i, matchedIndexes: matched, score });
+
+      const nextPattern = patternIndex < pattern.length - 1
+        ? pattern[patternIndex + 1]
+        : null;
+      const nextCandidate = candidates[candidateIndex + 1] ?? null;
+      if (
+        (nextPattern !== null && nextCandidate !== null && equalFold(nextCandidate, nextPattern, foldPatterns))
+        || nextCandidate === null
+      ) {
+        if (matchedIndex > -1) {
+          if (matchedIndexes.length === 0) {
+            bestScore += Math.max(matchedIndex * -5, -15);
+          }
+          totalScore += bestScore;
+          matchedIndexes.push(matchedIndex);
+          matchedCodePointIndexes.push(matchedCodePointIndex);
+          bestScore = -1;
+          matchedIndex = -1;
+          matchedCodePointIndex = -1;
+          patternIndex++;
+        }
+      }
+      lastIndex = currentByteIndex;
+      last = candidate;
     }
-  }
 
-  // Sort by score descending (higher is better)
-  results.sort((a, b) => b.score - a.score);
-
-  return results.map(r => ({
-    index: r.index,
-    matchedIndexes: r.matchedIndexes,
-  }));
-}
-
-/** Returns null if no match, or array of matched character indices. */
-function fuzzyMatch(lowerTerm: string, lowerTarget: string): number[] | null {
-  if (lowerTerm.length === 0) return [];
-  const indices: number[] = [];
-  let ti = 0;
-  for (let si = 0; si < lowerTarget.length && ti < lowerTerm.length; si++) {
-    if (lowerTarget[si] === lowerTerm[ti]) {
-      indices.push(si);
-      ti++;
-    }
-  }
-  return ti === lowerTerm.length ? indices : null;
-}
-
-/** Unsorted filter variant — same matching, no sorting. */
-export function unsortedFilter(term: string, targets: string[]): Rank[] {
-  const results: Rank[] = [];
-  const lowerTerm = term.toLowerCase();
-
-  for (let i = 0; i < targets.length; i++) {
-    const matched = fuzzyMatch(lowerTerm, targets[i].toLowerCase());
-    if (matched) {
-      results.push({ index: i, matchedIndexes: matched });
+    totalScore += matchedIndexes.length - Buffer.byteLength(target);
+    if (matchedIndexes.length === pattern.length) {
+      results.push({
+        index: targetIndex,
+        matchedIndexes: matchedCodePointIndexes,
+        score: totalScore,
+      });
     }
   }
   return results;
+}
+
+function equalFold(
+  left: string | undefined,
+  right: string | undefined,
+  patterns: Map<string, RegExp>,
+): boolean {
+  if (left === undefined || right === undefined) return false;
+  if (left === right) return true;
+
+  const leftCode = left.codePointAt(0)!;
+  const rightCode = right.codePointAt(0)!;
+  if (leftCode <= 0x7f && rightCode <= 0x7f) {
+    const foldedLeft = leftCode >= 0x41 && leftCode <= 0x5a ? leftCode + 0x20 : leftCode;
+    const foldedRight = rightCode >= 0x41 && rightCode <= 0x5a ? rightCode + 0x20 : rightCode;
+    return foldedLeft === foldedRight;
+  }
+
+  let pattern = patterns.get(right);
+  if (!pattern) {
+    const escaped = right.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+    pattern = new RegExp(`^(?:${escaped})$`, 'iu');
+    patterns.set(right, pattern);
+  }
+  return pattern.test(left);
 }
 
 // ── StyleRunes (inline — not available in our lipgloss port) ────────────────
@@ -404,14 +476,15 @@ function styleRunes(
   let buf = '';
   let inMatch = false;
 
-  for (let i = 0; i < str.length; i++) {
+  const runes = Array.from(str);
+  for (let i = 0; i < runes.length; i++) {
     const isMatch = set.has(i);
     if (isMatch !== inMatch && buf.length > 0) {
       result += inMatch ? matched.render(buf) : unmatched.render(buf);
       buf = '';
     }
     inMatch = isMatch;
-    buf += str[i];
+    buf += runes[i];
   }
   if (buf.length > 0) {
     result += inMatch ? matched.render(buf) : unmatched.render(buf);
@@ -811,7 +884,15 @@ export class Model {
 
   cursor(): number { return this._cursor; }
 
+  /** Returns the configured list width. */
+  width(): number { return this._width; }
+
+  /** Returns the configured list height. */
+  height(): number { return this._height; }
+
+  /** Legacy width accessor retained for compatibility. */
   widthValue(): number { return this._width; }
+  /** Legacy height accessor retained for compatibility. */
   heightValue(): number { return this._height; }
 
   // ── Navigation ────────────────────────────────────────────────────────

@@ -44,6 +44,10 @@ describe('Binding', () => {
     expect(binding.keys()).toEqual([]);
   });
 
+  test('an explicitly empty key slice remains enabled like upstream', () => {
+    expect(newBinding(withKeys()).enabled()).toBe(true);
+  });
+
   test('setKeys replaces existing keys', () => {
     const binding = newBinding(withKeys('a', 'b'));
     binding.setKeys('x', 'y', 'z');

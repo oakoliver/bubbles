@@ -5,6 +5,7 @@
  */
 import type { Cmd, Msg } from '@oakoliver/bubbletea';
 import { Tick, Batch } from '@oakoliver/bubbletea';
+import { formatDuration } from '../internal/duration.js';
 
 /** Internal ID management. */
 let _lastID = 0;
@@ -178,24 +179,4 @@ export class Model {
 /** Creates a new timer. */
 export function newTimer(timeout: number, ...opts: Option[]): Model {
   return new Model(timeout, ...opts);
-}
-
-/** Formats a duration in ms to a human-readable string like Go's time.Duration. */
-function formatDuration(ms: number): string {
-  if (ms <= 0) return '0s';
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  const remainingMs = ms % 1000;
-
-  if (minutes > 0) {
-    if (seconds > 0 || remainingMs > 0) {
-      return `${minutes}m${seconds}s`;
-    }
-    return `${minutes}m0s`;
-  }
-  if (remainingMs > 0) {
-    return `${totalSeconds}.${String(remainingMs).padStart(3, '0').replace(/0+$/, '')}s`;
-  }
-  return `${totalSeconds}s`;
 }

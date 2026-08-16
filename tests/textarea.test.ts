@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Model, newTextarea } from '../src/textarea/textarea.js';
-import { stripAnsi, stringWidth } from '@oakoliver/lipgloss';
+import { newStyle, stripAnsi, stringWidth } from '@oakoliver/lipgloss';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -142,9 +142,8 @@ describe('TestCanHandleEmoji', () => {
     const ta = newTestTextArea();
     ta.setValue('🧋🧋🧋');
     const li = ta.lineInfo();
-    // Go returns 6 (each emoji = width 2 via uniseg). Our stringWidth treats
-    // emoji as width 1, so charOffset = 3. Accept our implementation's value.
-    expect(li.charOffset).toBe(3);
+    // Each emoji occupies two terminal cells, matching upstream uniseg width.
+    expect(li.charOffset).toBe(6);
   });
 });
 
@@ -602,5 +601,125 @@ describe('Placeholder', () => {
     const view = stripString(ta.view());
     expect(view).toContain('line one');
     expect(view).toContain('line two');
+  });
+});
+
+
+describe('v2.1.1 dynamic height and prompt parity', () => {
+  function dynamicTextarea(minimum: number, maximum: number): Model {
+    const ta = newTextarea();
+    ta.prompt = '';
+    ta.showLineNumbers = false;
+    ta.dynamicHeight = true;
+    ta.minHeight = minimum;
+    ta.maxHeight = maximum;
+    ta.setWidth(20);
+    ta.focus();
+    ta.update(null);
+    return ta;
+  }
+
+  test('grows and shrinks with logical lines', () => {
+    const ta = dynamicTextarea(1, 20);
+    ta.update(keyPress('a'));
+    ta.update(enterKey());
+    ta.update(keyPress('b'));
+    expect(ta.height()).toBe(2);
+
+    ta.cursorStart();
+    ta.update(backspaceKey());
+    expect(ta.height()).toBe(1);
+  });
+
+  test('respects minimum and maximum visible heights', () => {
+    const minimum = dynamicTextarea(5, 20);
+    minimum.setValue('a');
+    expect(minimum.height()).toBe(5);
+
+    const maximum = dynamicTextarea(1, 3);
+    maximum.setValue('a\nb\nc\nd\ne');
+    expect(maximum.height()).toBe(3);
+    expect(maximum.lineCount()).toBe(5);
+  });
+
+  test('recalculates visual height after width changes', () => {
+    const ta = dynamicTextarea(1, 50);
+    ta.setWidth(40);
+    ta.setValue('abcdefghijklmnopqrstuvwxyz');
+    expect(ta.height()).toBe(1);
+
+    ta.setWidth(10);
+    expect(ta.height()).toBeGreaterThanOrEqual(3);
+  });
+
+  test('accepts Bubble Tea paste messages and grows to pasted content', () => {
+    const ta = dynamicTextarea(1, 20);
+    ta.update({ _tag: 'PasteMsg', content: 'one\ntwo\nthree\nfour' });
+
+    expect(ta.lineCount()).toBe(4);
+    expect(ta.height()).toBe(4);
+    expect(ta.line()).toBe(3);
+  });
+
+  test('caps pasted visual content at maxContentHeight', () => {
+    const ta = dynamicTextarea(1, 5);
+    ta.maxContentHeight = 5;
+    ta.update({ _tag: 'PasteMsg', content: '1\n2\n3\n4\n5\n6\n7\n8' });
+
+    expect(ta.lineCount()).toBeLessThanOrEqual(5);
+    expect(ta.height()).toBeLessThanOrEqual(5);
+  });
+
+  test('returns a clipboard command for ctrl+v', () => {
+    const ta = dynamicTextarea(1, 5);
+    const [, cmd] = ta.update(keyPress('ctrl+v'));
+    expect(typeof cmd).toBe('function');
+  });
+
+  test('styles static and dynamic prompts exactly once', () => {
+    const makeTextarea = () => {
+      const ta = newTextarea();
+      ta.showLineNumbers = false;
+      ta.setHeight(1);
+      ta.focus();
+      const styles = ta.styles();
+      styles.focused.prompt = newStyle().foreground('1');
+      ta.setStyles(styles);
+      ta.setValue('x');
+      return ta;
+    };
+
+    const fixed = makeTextarea();
+    fixed.prompt = '> ';
+    fixed.setWidth(10);
+
+    const dynamic = makeTextarea();
+    dynamic.setPromptFunc(2, () => '> ');
+    dynamic.setWidth(10);
+
+    expect(dynamic.view()).toBe(fixed.view());
+  });
+});
+
+describe('real cursor parity', () => {
+  test('returns textarea-relative cursor metadata for a focused real cursor', () => {
+    const ta = newTextarea();
+    expect(ta.cursor()).toBeNull();
+
+    ta.prompt = '';
+    ta.showLineNumbers = false;
+    ta.setWidth(10);
+    ta.setValue('abc');
+    ta.setVirtualCursor(false);
+    ta.focus();
+
+    expect(ta.cursor()).toMatchObject({
+      x: 3,
+      y: 0,
+      color: '7',
+      blink: true,
+    });
+    ta.blur();
+    expect(ta.cursor()).toBeNull();
   });
 });

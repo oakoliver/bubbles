@@ -8,11 +8,14 @@ import { describe, expect, test } from 'bun:test';
 import {
   Model,
   newList,
+  newDefaultDelegate,
   FilterState,
+  defaultFilter,
+  unsortedFilter,
 } from '../src/list/list.js';
 import type { Item, ItemDelegate } from '../src/list/list.js';
 import type { Msg, Cmd } from '@oakoliver/bubbletea';
-import { stripAnsi } from '@oakoliver/lipgloss';
+import { newStyle, stripAnsi } from '@oakoliver/lipgloss';
 
 // ── Test helpers ────────────────────────────────────────────────────────────
 
@@ -185,5 +188,71 @@ describe('TestSetFilterState', () => {
     const lines = list.view().split('\n');
     const footer = stripAnsi(lines[lines.length - 1]);
     expect(footer.toLowerCase()).toContain('clear');
+  });
+});
+
+describe('v2 list parity', () => {
+  test('uses sahilm/fuzzy exhaustive matching and empty-term semantics', () => {
+    expect(defaultFilter('tk', ['The Black Knight'])).toEqual([
+      { index: 0, matchedIndexes: [0, 10] },
+    ]);
+    expect(defaultFilter('', ['cat'])).toEqual([]);
+  });
+
+  test('matches Unicode simple-fold equivalents without locale-sensitive false positives', () => {
+    expect(defaultFilter('s', ['\u017f'])).toEqual([
+      { index: 0, matchedIndexes: [0] },
+    ]);
+    expect(defaultFilter('\u03c3', ['\u03c2'])).toEqual([
+      { index: 0, matchedIndexes: [0] },
+    ]);
+    expect(defaultFilter('i', ['\u0131'])).toEqual([]);
+  });
+
+  test('sorts fuzzy ranks by canonical score while unsortedFilter preserves input order', () => {
+    const targets = ['moduleNameResolver.ts', 'my name is_Ramsey'];
+    expect(defaultFilter('mnr', targets).map(rank => rank.index)).toEqual([1, 0]);
+    expect(unsortedFilter('mnr', targets).map(rank => rank.index)).toEqual([0, 1]);
+  });
+
+  test('returns code-point indexes consumed by the list renderer', () => {
+    expect(defaultFilter('x', ['éx'])).toEqual([
+      { index: 0, matchedIndexes: [1] },
+    ]);
+    expect(defaultFilter('x', ['😀x'])).toEqual([
+      { index: 0, matchedIndexes: [1] },
+    ]);
+    expect(defaultFilter('x', ['👨‍👩‍👧‍👦x'])).toEqual([
+      { index: 0, matchedIndexes: [7] },
+    ]);
+  });
+
+  test('renders non-ASCII filter matches without splitting surrogate pairs', () => {
+    const item = {
+      filterValue: () => '😀x',
+      title: () => '😀x',
+      description: () => '',
+    };
+    const delegate = newDefaultDelegate();
+    delegate.showDescription = false;
+    delegate.styles.selectedTitle = newStyle();
+    delegate.styles.filterMatch = newStyle().underline(true);
+    const list = newList([item], delegate, 20, 5);
+    list.filterState = FilterState.FilterApplied;
+    list['_filteredItems'] = [{ item, index: 0, matches: [1] }];
+
+    const rendered = delegate.render(list, 0, item);
+    expect(rendered).toContain('😀');
+    expect(rendered).toContain(delegate.styles.filterMatch.render('x'));
+  });
+
+  test('uses Bubble Tea v2 key names and exposes width and height', () => {
+    const items = [new TestItem('foo'), new TestItem('bar'), new TestItem('baz')];
+    const list = newList(items, testDelegate, 40, 12);
+    expect(list.keyMap.prevPage.keys()).toContain('pgup');
+    expect(list.keyMap.nextPage.keys()).toContain('pgdown');
+    expect(list.keyMap.quit.keys()).toContain('esc');
+    expect(list.width()).toBe(40);
+    expect(list.height()).toBe(12);
   });
 });

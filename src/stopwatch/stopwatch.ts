@@ -5,6 +5,7 @@
  */
 import type { Cmd, Msg } from '@oakoliver/bubbletea';
 import { Tick, Sequence } from '@oakoliver/bubbletea';
+import { formatDuration } from '../internal/duration.js';
 
 /** Internal ID management. */
 let _lastID = 0;
@@ -187,24 +188,4 @@ function _tick(id: number, tag: number, interval: number): Cmd {
     id,
     tag,
   } as TickMsg));
-}
-
-/** Formats a duration in ms to a human-readable string. */
-function formatDuration(ms: number): string {
-  if (ms <= 0) return '0s';
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  const remainingMs = ms % 1000;
-
-  if (minutes > 0) {
-    if (seconds > 0 || remainingMs > 0) {
-      return `${minutes}m${seconds}s`;
-    }
-    return `${minutes}m0s`;
-  }
-  if (remainingMs > 0) {
-    return `${totalSeconds}.${String(remainingMs).padStart(3, '0').replace(/0+$/, '')}s`;
-  }
-  return `${totalSeconds}s`;
 }

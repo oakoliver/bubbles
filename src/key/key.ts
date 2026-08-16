@@ -21,16 +21,19 @@ export class Binding {
   private _keys: string[];
   private _help: Help;
   private _disabled: boolean;
+  private _bound: boolean;
 
   constructor() {
     this._keys = [];
     this._help = { key: '', desc: '' };
     this._disabled = false;
+    this._bound = false;
   }
 
   /** Sets the keys for the keybinding. */
   setKeys(...keys: string[]): void {
     this._keys = keys;
+    this._bound = true;
   }
 
   /** Returns the keys for the keybinding. */
@@ -54,7 +57,7 @@ export class Binding {
    * by default.
    */
   enabled(): boolean {
-    return !this._disabled && this._keys.length > 0;
+    return !this._disabled && this._bound;
   }
 
   /** Enables or disables the keybinding. */
@@ -70,6 +73,7 @@ export class Binding {
   unbind(): void {
     this._keys = [];
     this._help = { key: '', desc: '' };
+    this._bound = false;
   }
 }
 

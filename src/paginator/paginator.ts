@@ -21,8 +21,8 @@ export interface KeyMap {
 /** Returns the default set of key bindings. */
 export function defaultKeyMap(): KeyMap {
   return {
-    prevPage: newBinding(withKeys('pageup', 'left', 'h')),
-    nextPage: newBinding(withKeys('pagedown', 'right', 'l')),
+    prevPage: newBinding(withKeys('pgup', 'left', 'h')),
+    nextPage: newBinding(withKeys('pgdown', 'right', 'l')),
   };
 }
 
@@ -176,10 +176,30 @@ export class Model {
   }
 
   private _arabicView(): string {
-    // Simple sprintf replacement for "%d/%d"
-    return this.arabicFormat
-      .replace('%d', String(this.page + 1))
-      .replace('%d', String(this.totalPages));
+    let valueIndex = 0;
+    const values = [this.page + 1, this.totalPages];
+    return this.arabicFormat.replace(
+      /%([+ 0-]*)(\d*)d/g,
+      (_match, flags: string, widthText: string) => {
+        const value = values[valueIndex++] ?? 0;
+        const width = widthText === '' ? 0 : Number.parseInt(widthText, 10);
+        const sign = value < 0
+          ? '-'
+          : flags.includes('+')
+            ? '+'
+            : flags.includes(' ')
+              ? ' '
+              : '';
+        const digits = String(Math.abs(value));
+        const raw = sign + digits;
+        if (raw.length >= width) return raw;
+
+        const paddingWidth = width - raw.length;
+        if (flags.includes('-')) return raw + ' '.repeat(paddingWidth);
+        if (flags.includes('0')) return sign + '0'.repeat(paddingWidth) + digits;
+        return ' '.repeat(paddingWidth) + raw;
+      },
+    );
   }
 }
 

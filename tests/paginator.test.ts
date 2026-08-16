@@ -29,6 +29,12 @@ describe('New', () => {
     expect(model.perPage).toBe(perPage);
     expect(model.totalPages).toBe(totalPages);
   });
+
+  test('uses Bubble Tea v2 pgup and pgdown key names', () => {
+    const model = newPaginator();
+    expect(model.keyMap.prevPage.keys()).toContain('pgup');
+    expect(model.keyMap.nextPage.keys()).toContain('pgdown');
+  });
 });
 
 describe('SetTotalPages', () => {
@@ -153,5 +159,27 @@ describe('View', () => {
     model.setTotalPages(3);
     model.page = 1;
     expect(model.view()).toBe('○•○');
+  });
+
+  test('supports Go-style integer width formatting', () => {
+    const model = newPaginator(withTotalPages(12));
+    model.page = 2;
+    model.arabicFormat = '%02d/%02d';
+    expect(model.view()).toBe('03/12');
+  });
+
+  test('uses Go flag precedence and sign-aware zero padding', () => {
+    const leftAligned = newPaginator(withTotalPages(1));
+    leftAligned.arabicFormat = '%-03d/%-03d';
+    expect(leftAligned.view()).toBe('1  /1  ');
+
+    const negative = newPaginator(withTotalPages(10));
+    negative.page = -2;
+    negative.arabicFormat = '%03d/%03d';
+    expect(negative.view()).toBe('-01/010');
+
+    const signed = newPaginator(withTotalPages(1));
+    signed.arabicFormat = '%+03d/% 03d';
+    expect(signed.view()).toBe('+01/ 01');
   });
 });

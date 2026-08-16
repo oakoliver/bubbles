@@ -16,6 +16,31 @@ export function stripAnsi(str: string): string {
   return str.replace(ANSI_REGEX, '');
 }
 
+export interface AnsiToken {
+  readonly text: string;
+  readonly ansi: boolean;
+}
+
+/** Splits a string into ANSI escape sequences and visible-text chunks. */
+export function tokenizeAnsi(str: string): AnsiToken[] {
+  const tokens: AnsiToken[] = [];
+  let offset = 0;
+  ANSI_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = ANSI_REGEX.exec(str)) !== null) {
+    if (match.index > offset) {
+      tokens.push({ text: str.slice(offset, match.index), ansi: false });
+    }
+    tokens.push({ text: match[0], ansi: true });
+    offset = match.index + match[0].length;
+  }
+  if (offset < str.length) {
+    tokens.push({ text: str.slice(offset), ansi: false });
+  }
+  ANSI_REGEX.lastIndex = 0;
+  return tokens;
+}
+
 /**
  * Measure the visible (printable) width of a string, ignoring ANSI codes.
  */
