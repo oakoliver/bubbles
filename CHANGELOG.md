@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.2 — cursor colour matches upstream
+
+### Fixed
+
+- **A null or unset cursor colour no longer keeps the previous colour.** Textinput's `setStyles` (and `setVirtualCursor`) only restyled the virtual cursor when `styles.cursor.color` was truthy, so passing `null` left the earlier colour in place. For example, huh's Base and Base16 themes showed the default cursor colour instead of none. Like upstream's `updateVirtualCursorStyle`, the cursor style is now always replaced with `newStyle().foreground(color)`, so a null colour renders the cursor reverse-video with no foreground. Textarea already did this. Its `CursorStyle.color` type now allows `null` too, and both components pass `null` (never `undefined`) to the real cursor's `color`.
+
+### Added
+
+- Goldens generated with real Go (bubbles v2.2.1) for focused textinput and textarea renders with a nil cursor colour and with set colours (`#ff00ff`, `2`, `212`), with blink on and off, with a value and with a placeholder. The comparison is by styled cell, so it does not depend on how the two lipgloss ports encode SGR sequences.
+
 ## 1.2.1 — ANSI escape parsing fix
 
 ### Fixed

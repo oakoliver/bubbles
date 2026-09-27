@@ -1,0 +1,258 @@
+[
+  {
+    "name": "textinput/nil",
+    "component": "textinput",
+    "color": null,
+    "blink": true,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/nil",
+    "component": "textarea",
+    "color": null,
+    "blink": true,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/nil",
+    "component": "textinput",
+    "color": null,
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7m \u001b[m                  "
+  },
+  {
+    "name": "textarea/nil",
+    "component": "textarea",
+    "color": null,
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/nil",
+    "component": "textinput",
+    "color": null,
+    "blink": false,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/nil",
+    "component": "textarea",
+    "color": null,
+    "blink": false,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/nil",
+    "component": "textinput",
+    "color": null,
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7m \u001b[m                  "
+  },
+  {
+    "name": "textarea/nil",
+    "component": "textarea",
+    "color": null,
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/#ff00ff",
+    "component": "textinput",
+    "color": "#ff00ff",
+    "blink": true,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7;38;2;255;0;255mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/#ff00ff",
+    "component": "textarea",
+    "color": "#ff00ff",
+    "blink": true,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7;38;2;255;0;255mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/#ff00ff",
+    "component": "textinput",
+    "color": "#ff00ff",
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7;38;2;255;0;255m \u001b[m                  "
+  },
+  {
+    "name": "textarea/#ff00ff",
+    "component": "textarea",
+    "color": "#ff00ff",
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7;38;2;255;0;255m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/#ff00ff",
+    "component": "textinput",
+    "color": "#ff00ff",
+    "blink": false,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7;38;2;255;0;255mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/#ff00ff",
+    "component": "textarea",
+    "color": "#ff00ff",
+    "blink": false,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7;38;2;255;0;255mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/#ff00ff",
+    "component": "textinput",
+    "color": "#ff00ff",
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7;38;2;255;0;255m \u001b[m                  "
+  },
+  {
+    "name": "textarea/#ff00ff",
+    "component": "textarea",
+    "color": "#ff00ff",
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7;38;2;255;0;255m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/2",
+    "component": "textinput",
+    "color": "2",
+    "blink": true,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7;32mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/2",
+    "component": "textarea",
+    "color": "2",
+    "blink": true,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7;32mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/2",
+    "component": "textinput",
+    "color": "2",
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7;32m \u001b[m                  "
+  },
+  {
+    "name": "textarea/2",
+    "component": "textarea",
+    "color": "2",
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7;32m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/2",
+    "component": "textinput",
+    "color": "2",
+    "blink": false,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7;32mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/2",
+    "component": "textarea",
+    "color": "2",
+    "blink": false,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7;32mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/2",
+    "component": "textinput",
+    "color": "2",
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7;32m \u001b[m                  "
+  },
+  {
+    "name": "textarea/2",
+    "component": "textarea",
+    "color": "2",
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7;32m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/212",
+    "component": "textinput",
+    "color": "212",
+    "blink": true,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7;38;5;212mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/212",
+    "component": "textarea",
+    "color": "212",
+    "blink": true,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7;38;5;212mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/212",
+    "component": "textinput",
+    "color": "212",
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7;38;5;212m \u001b[m                  "
+  },
+  {
+    "name": "textarea/212",
+    "component": "textarea",
+    "color": "212",
+    "blink": true,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7;38;5;212m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  },
+  {
+    "name": "textinput/212",
+    "component": "textinput",
+    "color": "212",
+    "blink": false,
+    "value": "",
+    "view": "\u001b[37m> \u001b[m\u001b[7;38;5;212mt\u001b[m\u001b[38;5;240mype\u001b[m\u001b[38;5;240m                 \u001b[m"
+  },
+  {
+    "name": "textarea/212",
+    "component": "textarea",
+    "color": "212",
+    "blink": false,
+    "value": "",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40m\u001b[7;38;5;212mt\u001b[m\u001b[m\u001b[40m\u001b[38;5;240mype\u001b[m\u001b[m\u001b[40m          \u001b[m\n\u001b[38;5;240m\u001b[37m┃ \u001b[m\u001b[m\u001b[30m \u001b[m                 "
+  },
+  {
+    "name": "textinput/212",
+    "component": "textinput",
+    "color": "212",
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[37m> \u001b[mhi\u001b[7;38;5;212m \u001b[m                  "
+  },
+  {
+    "name": "textarea/212",
+    "component": "textarea",
+    "color": "212",
+    "blink": false,
+    "value": "hi",
+    "view": "\u001b[40m\u001b[37m┃ \u001b[m\u001b[m\u001b[40m\u001b[38;5;240;40m  1 \u001b[m\u001b[m\u001b[40mhi\u001b[m\u001b[40m\u001b[7;38;5;212m \u001b[m\u001b[m\u001b[40m\u001b[m\u001b[40m           \u001b[m\n\u001b[37m┃ \u001b[m\u001b[30m              \u001b[m    "
+  }
+]

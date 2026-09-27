@@ -81,6 +81,10 @@ export interface StyleState {
 
 /** CursorStyle is the style for virtual cursors. */
 export interface CursorStyle {
+  /**
+   * Cursor colour. `null` (or unset) means no colour: the virtual cursor is
+   * rendered without a foreground and the real cursor gets no colour.
+   */
   color: string | null;
   shape?: CursorShape;
   blink: boolean;
@@ -614,7 +618,7 @@ export class Model {
 
     const cursor = NewCursor(xOffset, 0);
     cursor.blink = this._styles.cursor.blink;
-    cursor.color = this._styles.cursor.color;
+    cursor.color = this._styles.cursor.color ?? null;
     cursor.shape = this._styles.cursor.shape ?? CursorShape.Block;
     return cursor;
   }
@@ -962,9 +966,9 @@ export class Model {
       return;
     }
 
-    if (this._styles.cursor.color) {
-      this._virtualCursor.style = newStyle().foreground(this._styles.cursor.color);
-    }
+    // Upstream always replaces the style, so a null/unset colour clears any
+    // previous cursor colour rather than keeping it.
+    this._virtualCursor.style = newStyle().foreground(this._styles.cursor.color);
 
     if (this._styles.cursor.blink) {
       if (this._styles.cursor.blinkSpeed > 0) {

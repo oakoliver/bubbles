@@ -231,8 +231,11 @@ export function defaultKeyMap(): KeyMap {
 
 /** Cursor style configuration. */
 export interface CursorStyle {
-  /** Color for the cursor. ANSI color string (e.g. "7"). */
-  color: string;
+  /**
+   * Color for the cursor. ANSI color string (e.g. "7"). `null` (or unset)
+   * means no colour.
+   */
+  color: string | null;
   /** Real terminal cursor shape. */
   shape?: CursorShape;
   /** Whether the cursor should blink. */
@@ -1525,7 +1528,7 @@ export class Model {
 
     const cursor = NewCursor(xOffset, yOffset);
     cursor.blink = this._styles.cursor.blink;
-    cursor.color = this._styles.cursor.color;
+    cursor.color = this._styles.cursor.color ?? null;
     cursor.shape = this._styles.cursor.shape ?? CursorShape.Block;
     return cursor;
   }
