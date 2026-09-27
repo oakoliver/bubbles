@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.1 — ANSI escape parsing fix
+
+### Fixed
+
+- **OSC sequences (hyperlinks, window titles) broke width, cutting and the viewport.** The internal ANSI parser ended every escape sequence at its first letter, so an OSC 8 hyperlink such as `ESC ]8;id=1;https://… ESC \` ended at the `i` of `id=` and the URL counted as visible text. Lines with links were measured too wide and truncated early in the viewport (a pager showed "availab" instead of "available on npm…"), and cutting could drop the link's closing sequence, leaving the hyperlink open on the following lines. `src/internal/ansi.ts` is now a port of `charmbracelet/x/ansi` v0.11.8's state machine: CSI ends at a final byte 0x40–0x7E; OSC, DCS, SOS, PM and APC end at ST (`ESC \`) or, for OSC, BEL; two-byte and intermediate `ESC` sequences are recognised. `stringWidth`, `stripAnsi`, `cut` and the viewport's highlight tokenizer all use it.
+- **`cut` follows x/ansi's `Cut`.** Like upstream, it keeps every escape sequence and drops only the visible text outside the range, so a style or hyperlink open at the cut keeps its own closing sequence. It no longer re-emits earlier sequences and appends `ESC[0m`. Control characters such as `\t` are zero-width, as in x/ansi.
+
+### Added
+
+- `ansiTruncate(s, width, tail)` and `ansiTruncateLeft(s, n, prefix)`, ports of x/ansi's `Truncate` and `TruncateLeft`.
+- Goldens generated with real Go (x/ansi v0.11.8 and bubbles v2.2.1) for width, strip, truncate, truncate-left and cut on strings with OSC 8 links, OSC titles, SGR, DCS/APC/PM/SOS and two-byte escapes, plus viewport renders of lines with links (plain, narrow, horizontal offsets, vertical offset, soft wrap).
+
 ## 1.2.0 — parity with Bubbles v2.2.1
 
 Syncs with upstream [v2.2.0](https://github.com/charmbracelet/bubbles/releases/tag/v2.2.0) and [v2.2.1](https://github.com/charmbracelet/bubbles/releases/tag/v2.2.1). Upstream `main` after v2.2.1 only bumps Go dependencies.

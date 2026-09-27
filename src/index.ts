@@ -300,6 +300,8 @@ export {
   stripAnsi as ansiStripAnsi,
   stringWidth as ansiStringWidth,
   cut as ansiCut,
+  truncate as ansiTruncate,
+  truncateLeft as ansiTruncateLeft,
 } from './internal/ansi.js';
 
 // ── Internal: Harmonica (spring physics) ────────────────────────────────────
