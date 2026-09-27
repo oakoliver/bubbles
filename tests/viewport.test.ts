@@ -504,3 +504,19 @@ describe('v2 viewport parity', () => {
     expect(noGutter({ index: 3, totalLines: 10, soft: true })).toBe('');
   });
 });
+// ── Leading whitespace is preserved (lipgloss.Width parity) ─────────────────
+
+describe('viewport preserves leading whitespace', () => {
+  test('indented and styled-space lines keep their indentation', () => {
+    const vp = newViewport(withWidth(12), withHeight(4));
+    const styledSpaces = newStyle().bold(true).render('  ');
+    vp.setContent(['  indented', `${styledSpaces}styled`, 'flush'].join('\n'));
+    const lines = stripAnsi(vp.view()).split('\n');
+    expect(lines).toEqual([
+      '  indented  ',
+      '  styled    ',
+      'flush       ',
+      '            ',
+    ]);
+  });
+});

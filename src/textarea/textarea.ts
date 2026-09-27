@@ -12,8 +12,7 @@
  * - Placeholder text
  * - Character limit
  * - Focused / Blurred styling
- *
- * Note: Clipboard paste is stubbed (no-op). Real cursor not ported.
+ * - Keyboard and pointer-driven text selection with clipboard copy
  *
  * @module
  */
@@ -33,7 +32,7 @@ import {
 import { newViewport, Model as ViewportModel } from '../viewport/viewport.js';
 import { newSanitizer } from '../internal/runeutil.js';
 import type { Sanitizer } from '../internal/runeutil.js';
-import { readClipboard } from '../internal/clipboard.js';
+import { readClipboard, writeClipboard } from '../internal/clipboard.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -178,6 +177,15 @@ export interface KeyMap {
   lowercaseWordForward: Binding;
   capitalizeWordForward: Binding;
   transposeCharacterBackward: Binding;
+
+  selectCharacterForward: Binding;
+  selectCharacterBackward: Binding;
+  selectWordForward: Binding;
+  selectWordBackward: Binding;
+  selectLineUp: Binding;
+  selectLineDown: Binding;
+  selectAll: Binding;
+  copySelection: Binding;
 }
 
 /** Returns the default keybindings for the textarea. */
@@ -185,12 +193,12 @@ export function defaultKeyMap(): KeyMap {
   return {
     characterForward: newBinding(withKeys('right', 'ctrl+f'), withHelp('right', 'character forward')),
     characterBackward: newBinding(withKeys('left', 'ctrl+b'), withHelp('left', 'character backward')),
-    wordForward: newBinding(withKeys('alt+right', 'alt+f'), withHelp('alt+right', 'word forward')),
-    wordBackward: newBinding(withKeys('alt+left', 'alt+b'), withHelp('alt+left', 'word backward')),
+    wordForward: newBinding(withKeys('alt+right', 'ctrl+right', 'alt+f'), withHelp('alt+right', 'word forward')),
+    wordBackward: newBinding(withKeys('alt+left', 'ctrl+left', 'alt+b'), withHelp('alt+left', 'word backward')),
     lineNext: newBinding(withKeys('down', 'ctrl+n'), withHelp('down', 'next line')),
     linePrevious: newBinding(withKeys('up', 'ctrl+p'), withHelp('up', 'previous line')),
-    deleteWordBackward: newBinding(withKeys('alt+backspace', 'ctrl+w'), withHelp('alt+backspace', 'delete word backward')),
-    deleteWordForward: newBinding(withKeys('alt+delete', 'alt+d'), withHelp('alt+delete', 'delete word forward')),
+    deleteWordBackward: newBinding(withKeys('alt+backspace', 'ctrl+w', 'ctrl+backspace'), withHelp('alt+backspace', 'delete word backward')),
+    deleteWordForward: newBinding(withKeys('alt+delete', 'alt+d', 'ctrl+delete'), withHelp('alt+delete', 'delete word forward')),
     deleteAfterCursor: newBinding(withKeys('ctrl+k'), withHelp('ctrl+k', 'delete after cursor')),
     deleteBeforeCursor: newBinding(withKeys('ctrl+u'), withHelp('ctrl+u', 'delete before cursor')),
     insertNewline: newBinding(withKeys('enter', 'ctrl+m'), withHelp('enter', 'insert newline')),
@@ -207,6 +215,15 @@ export function defaultKeyMap(): KeyMap {
     lowercaseWordForward: newBinding(withKeys('alt+l'), withHelp('alt+l', 'lowercase word forward')),
     uppercaseWordForward: newBinding(withKeys('alt+u'), withHelp('alt+u', 'uppercase word forward')),
     transposeCharacterBackward: newBinding(withKeys('ctrl+t'), withHelp('ctrl+t', 'transpose character backward')),
+
+    selectCharacterForward: newBinding(withKeys('shift+right'), withHelp('shift+right', 'select character forward')),
+    selectCharacterBackward: newBinding(withKeys('shift+left'), withHelp('shift+left', 'select character backward')),
+    selectWordForward: newBinding(withKeys('ctrl+shift+right', 'alt+shift+right', 'alt+shift+f'), withHelp('alt+shift+right', 'select word forward')),
+    selectWordBackward: newBinding(withKeys('ctrl+shift+left', 'alt+shift+left', 'alt+shift+b'), withHelp('alt+shift+left', 'select word backward')),
+    selectLineUp: newBinding(withKeys('shift+up'), withHelp('shift+up', 'select line up')),
+    selectLineDown: newBinding(withKeys('shift+down'), withHelp('shift+down', 'select line down')),
+    selectAll: newBinding(withKeys('ctrl+g'), withHelp('ctrl+g', 'select all')),
+    copySelection: newBinding(withKeys('ctrl+shift+c'), withHelp('ctrl+shift+c', 'copy selection')),
   };
 }
 
@@ -236,6 +253,12 @@ export interface StyleState {
   endOfBuffer: Style;
   placeholder: Style;
   prompt: Style;
+  /**
+   * Styles text covered by an active selection. See
+   * {@link Model.beginSelection}. Optional for backwards compatibility with
+   * hand-built style states; an unset value renders with the text style.
+   */
+  selection?: Style;
 }
 
 function computedCursorLine(s: StyleState): Style {
@@ -259,6 +282,9 @@ function computedPrompt(s: StyleState): Style {
 function computedText(s: StyleState): Style {
   return s.text.inherit(s.base).inline(true);
 }
+function computedSelection(s: StyleState): Style {
+  return (s.selection ?? newStyle()).inherit(s.text).inherit(s.base).inline(true);
+}
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -281,6 +307,7 @@ export function defaultStyles(isDark: boolean): Styles {
     lineNumber: newStyle().foreground(ld('249', '7')),
     placeholder: newStyle().foreground('240'),
     prompt: newStyle().foreground('7'),
+    selection: newStyle().background(ld('253', '8')),
     text: newStyle(),
   };
 
@@ -292,6 +319,7 @@ export function defaultStyles(isDark: boolean): Styles {
     lineNumber: newStyle().foreground(ld('249', '7')),
     placeholder: newStyle().foreground('240'),
     prompt: newStyle().foreground('7'),
+    selection: newStyle().background(ld('253', '8')),
     text: newStyle().foreground(ld('245', '7')),
   };
 
@@ -354,6 +382,58 @@ export async function paste(): Promise<Msg> {
       error: error instanceof Error ? error : new Error(String(error)),
     };
   }
+}
+
+// ── Clipboard copy ──────────────────────────────────────────────────────────
+
+/** Message emitted after the selection was copied to the system clipboard. */
+export interface CopyMsg {
+  type: 'textarea.copy';
+  content: string;
+}
+
+/** Message emitted when copying the selection to the clipboard failed. */
+export interface CopyErrMsg {
+  type: 'textarea.copyErr';
+  error: Error;
+}
+
+// ── Position ────────────────────────────────────────────────────────────────
+
+/**
+ * A location in the textarea's logical buffer: `row` indexes a logical
+ * (unwrapped) line, `col` indexes a rune within that line. `col` may equal the
+ * line length, meaning "just past the last rune".
+ */
+export interface Position {
+  row: number;
+  col: number;
+}
+
+/** Reports whether p sorts before q in the buffer. */
+function positionBefore(p: Position, q: Position): boolean {
+  if (p.row !== q.row) return p.row < q.row;
+  return p.col < q.col;
+}
+
+function positionEqual(p: Position, q: Position): boolean {
+  return p.row === q.row && p.col === q.col;
+}
+
+/**
+ * Returns the index of the rune occupying the given display column within
+ * runes, accounting for double-width runes. A column past the end of the line
+ * yields runes.length.
+ */
+function runeIndexForColumn(runes: string[], col: number): number {
+  if (col <= 0) return 0;
+  let w = 0;
+  for (let i = 0; i < runes.length; i++) {
+    const rWidth = stringWidth(runes[i]);
+    if (w + rWidth > col) return i;
+    w += rWidth;
+  }
+  return runes.length;
 }
 
 // ── Model ───────────────────────────────────────────────────────────────────
@@ -427,6 +507,23 @@ export class Model {
 
   /** Rune sanitizer. */
   private _rsan: Sanitizer | null = null;
+
+  /**
+   * Selection anchor and head. The anchor is where the selection began; the
+   * head follows the pointer. Either may sort before the other — use
+   * {@link Model.selection} for a normalized range.
+   */
+  private _selAnchor: Position = { row: 0, col: 0 };
+  private _selHead: Position = { row: 0, col: 0 };
+
+  /**
+   * Whether a selection has been set at all. {@link Model.hasSelection}
+   * additionally requires it to be non-empty.
+   */
+  private _hasSelection: boolean = false;
+
+  /** Whether a drag is currently in progress. */
+  private _selecting: boolean = false;
 
   constructor() {
     this._viewport = newViewport();
@@ -651,6 +748,7 @@ export class Model {
     this._viewport.gotoTop();
     this.setCursorColumn(0);
     this._recalculateHeight();
+    this.clearSelection();
   }
 
   // ── Word ────────────────────────────────────────────────────────────────
@@ -864,7 +962,10 @@ export class Model {
   /** Moves cursor one word to the left. */
   private _wordLeft(): void {
     for (;;) {
+      const oldRow = this._row;
+      const oldCol = this._col;
       this._characterLeft(true);
+      if (this._row === oldRow && this._col === oldCol) return;
       if (this._col < this._value[this._row].length && !isSpace(this._value[this._row][this._col])) {
         break;
       }
@@ -1093,89 +1194,128 @@ export class Model {
         (m.type === 'textarea.paste' || m.type === 'paste' || m._tag === 'PasteMsg')
         && typeof m.content === 'string'
       ) {
+        this.deleteSelection();
         this._insertRunesFromUserInput([...m.content]);
       } else if (m.type === 'textarea.pasteErr' && m.error instanceof Error) {
+        this.err = m.error;
+      } else if (m.type === 'textarea.copyErr' && m.error instanceof Error) {
         this.err = m.error;
       } else if (m.type === 'keyPress' || m._tag === 'KeyPressMsg') {
         const km = this.keyMap;
 
         if (matches(m, km.deleteAfterCursor)) {
-          this._col = clamp(this._col, 0, this._value[this._row].length);
-          if (this._col >= this._value[this._row].length) {
-            this._mergeLineBelow(this._row);
+          if (this.hasSelection()) {
+            this.deleteSelection();
           } else {
-            this._deleteAfterCursor();
+            this._col = clamp(this._col, 0, this._value[this._row].length);
+            if (this._col >= this._value[this._row].length) {
+              this._mergeLineBelow(this._row);
+            } else {
+              this._deleteAfterCursor();
+            }
           }
         } else if (matches(m, km.deleteBeforeCursor)) {
-          this._col = clamp(this._col, 0, this._value[this._row].length);
-          if (this._col <= 0) {
-            this._mergeLineAbove(this._row);
+          if (this.hasSelection()) {
+            this.deleteSelection();
           } else {
-            this._deleteBeforeCursor();
+            this._col = clamp(this._col, 0, this._value[this._row].length);
+            if (this._col <= 0) {
+              this._mergeLineAbove(this._row);
+            } else {
+              this._deleteBeforeCursor();
+            }
           }
         } else if (matches(m, km.deleteCharacterBackward)) {
-          this._col = clamp(this._col, 0, this._value[this._row].length);
-          if (this._col <= 0) {
-            this._mergeLineAbove(this._row);
-          } else if (this._value[this._row].length > 0) {
-            this._value[this._row] = [
-              ...this._value[this._row].slice(0, Math.max(0, this._col - 1)),
-              ...this._value[this._row].slice(this._col),
-            ];
-            if (this._col > 0) this.setCursorColumn(this._col - 1);
+          if (this.hasSelection()) {
+            this.deleteSelection();
+          } else {
+            this._col = clamp(this._col, 0, this._value[this._row].length);
+            if (this._col <= 0) {
+              this._mergeLineAbove(this._row);
+            } else if (this._value[this._row].length > 0) {
+              this._value[this._row] = [
+                ...this._value[this._row].slice(0, Math.max(0, this._col - 1)),
+                ...this._value[this._row].slice(this._col),
+              ];
+              if (this._col > 0) this.setCursorColumn(this._col - 1);
+            }
           }
         } else if (matches(m, km.deleteCharacterForward)) {
-          if (this._value[this._row].length > 0 && this._col < this._value[this._row].length) {
-            this._value[this._row] = [
-              ...this._value[this._row].slice(0, this._col),
-              ...this._value[this._row].slice(this._col + 1),
-            ];
-          }
-          if (this._col >= this._value[this._row].length) {
-            this._mergeLineBelow(this._row);
+          if (this.hasSelection()) {
+            this.deleteSelection();
+          } else {
+            if (this._value[this._row].length > 0 && this._col < this._value[this._row].length) {
+              this._value[this._row] = [
+                ...this._value[this._row].slice(0, this._col),
+                ...this._value[this._row].slice(this._col + 1),
+              ];
+            }
+            if (this._col >= this._value[this._row].length) {
+              this._mergeLineBelow(this._row);
+            }
           }
         } else if (matches(m, km.deleteWordBackward)) {
-          if (this._col <= 0) {
+          if (this.hasSelection()) {
+            this.deleteSelection();
+          } else if (this._col <= 0) {
             this._mergeLineAbove(this._row);
           } else {
             this._deleteWordLeft();
           }
         } else if (matches(m, km.deleteWordForward)) {
-          this._col = clamp(this._col, 0, this._value[this._row].length);
-          if (this._col >= this._value[this._row].length) {
-            this._mergeLineBelow(this._row);
+          if (this.hasSelection()) {
+            this.deleteSelection();
           } else {
-            this._deleteWordRight();
+            this._col = clamp(this._col, 0, this._value[this._row].length);
+            if (this._col >= this._value[this._row].length) {
+              this._mergeLineBelow(this._row);
+            } else {
+              this._deleteWordRight();
+            }
           }
         } else if (matches(m, km.insertNewline)) {
+          this.deleteSelection();
           if (this._atContentLimit()) return [this, null];
           this._col = clamp(this._col, 0, this._value[this._row].length);
           this._splitLine(this._row, this._col);
         } else if (matches(m, km.lineEnd)) {
+          this.clearSelection();
           this.cursorEnd();
         } else if (matches(m, km.lineStart)) {
+          this.clearSelection();
           this.cursorStart();
         } else if (matches(m, km.characterForward)) {
+          this.clearSelection();
           this._characterRight();
         } else if (matches(m, km.lineNext)) {
+          this.clearSelection();
           this.cursorDown();
         } else if (matches(m, km.wordForward)) {
+          this.clearSelection();
           this._wordRight();
         } else if (matches(m, km.paste)) {
+          this.deleteSelection();
           cmds.push(paste);
         } else if (matches(m, km.characterBackward)) {
+          this.clearSelection();
           this._characterLeft(false);
         } else if (matches(m, km.linePrevious)) {
+          this.clearSelection();
           this.cursorUp();
         } else if (matches(m, km.wordBackward)) {
+          this.clearSelection();
           this._wordLeft();
         } else if (matches(m, km.inputBegin)) {
+          this.clearSelection();
           this.moveToBegin();
         } else if (matches(m, km.inputEnd)) {
+          this.clearSelection();
           this.moveToEnd();
         } else if (matches(m, km.pageUp)) {
+          this.clearSelection();
           this.pageUp();
         } else if (matches(m, km.pageDown)) {
+          this.clearSelection();
           this.pageDown();
         } else if (matches(m, km.lowercaseWordForward)) {
           this._lowercaseRight();
@@ -1185,9 +1325,39 @@ export class Model {
           this._capitalizeRight();
         } else if (matches(m, km.transposeCharacterBackward)) {
           this._transposeLeft();
+        } else if (matches(m, km.selectCharacterForward)) {
+          this._startKeyboardSelection();
+          this._characterRight();
+          this._updateKeyboardSelection();
+        } else if (matches(m, km.selectCharacterBackward)) {
+          this._startKeyboardSelection();
+          this._characterLeft(false);
+          this._updateKeyboardSelection();
+        } else if (matches(m, km.selectWordForward)) {
+          this._startKeyboardSelection();
+          this._wordRight();
+          this._updateKeyboardSelection();
+        } else if (matches(m, km.selectWordBackward)) {
+          this._startKeyboardSelection();
+          this._wordLeft();
+          this._updateKeyboardSelection();
+        } else if (matches(m, km.selectLineUp)) {
+          this._startKeyboardSelection();
+          this.cursorUp();
+          this._updateKeyboardSelection();
+        } else if (matches(m, km.selectLineDown)) {
+          this._startKeyboardSelection();
+          this.cursorDown();
+          this._updateKeyboardSelection();
+        } else if (matches(m, km.selectAll)) {
+          this.selectAll();
+        } else if (matches(m, km.copySelection)) {
+          const cmd = this.copySelection();
+          if (cmd) cmds.push(cmd);
         } else {
           // Default: insert typed text
           if (typeof m.text === 'string' && m.text.length > 0) {
+            this.deleteSelection();
             this._insertRunesFromUserInput([...m.text]);
           }
         }
@@ -1247,6 +1417,11 @@ export class Model {
         ? computedCursorLine(styles)
         : computedText(styles);
 
+      // wrappedBase is the index, within the logical line, of the first rune
+      // of the current wrapped segment. It is what maps a segment back onto
+      // selection coordinates.
+      let wrappedBase = 0;
+
       for (let wl = 0; wl < wrappedLines.length; wl++) {
         const wrappedLine = wrappedLines[wl];
 
@@ -1277,8 +1452,16 @@ export class Model {
           padding -= this._width - strwidth;
         }
 
-        // Render line with cursor
-        if (this._row === l && lineInfoVal.rowOffset === wl) {
+        // A selection covering this segment takes precedence over the inline
+        // cursor: during a drag the highlight is the meaningful affordance,
+        // and mixing the two would double-style the same cell.
+        const span = this._selectionSpanFor(l, wrappedBase, displayChars.length);
+        if (span !== null) {
+          const [selFrom, selTo] = span;
+          parts.push(style.render(displayChars.slice(0, selFrom).join('')));
+          parts.push(computedSelection(styles).render(displayChars.slice(selFrom, selTo).join('')));
+          parts.push(style.render(displayChars.slice(selTo).join('')));
+        } else if (this._row === l && lineInfoVal.rowOffset === wl) {
           parts.push(style.render(displayChars.slice(0, lineInfoVal.columnOffset).join('')));
           if (this._col >= line.length && lineInfoVal.charOffset >= this._width) {
             this._virtualCursor.setChar(' ');
@@ -1291,6 +1474,7 @@ export class Model {
         } else {
           parts.push(style.render(displayChars.join('')));
         }
+        wrappedBase += displayChars.length;
         parts.push(style.render(' '.repeat(Math.max(0, padding))));
         parts.push('\n');
       }
@@ -1439,6 +1623,272 @@ export class Model {
 
     this._viewport.setContent(parts.join(''));
     return this._activeStyle().base.render(this._viewport.view());
+  }
+
+  // ── Selection ───────────────────────────────────────────────────────────
+
+  /**
+   * Number of columns rendered to the left of the text content: the prompt,
+   * plus the line-number column when enabled. Pointer coordinates are offset
+   * by this much before being mapped to a column.
+   */
+  private _gutterWidth(): number {
+    let w = this._promptWidth;
+    if (this.showLineNumbers) {
+      w += String(this.maxHeight).length + 2;
+    }
+    return w;
+  }
+
+  /**
+   * Maps coordinates within the textarea's rendered area to a buffer
+   * position. Coordinates are relative to the textarea itself: (0, 0) is its
+   * top-left cell, including the prompt/line-number gutter. Callers that
+   * render the textarea at an offset must subtract that offset first.
+   *
+   * Coordinates outside the content resolve to the nearest position: above
+   * the first line yields the start of the buffer, below the last yields its
+   * end, and a column past a line's text yields the end of that line.
+   */
+  positionAt(x: number, y: number): Position {
+    if (this._value.length === 0) return { row: 0, col: 0 };
+
+    const targetLine = y + this._viewport.yOffset();
+    if (targetLine < 0) return { row: 0, col: 0 };
+
+    const contentX = Math.max(0, x - this._gutterWidth());
+
+    let display = 0;
+    for (let row = 0; row < this._value.length; row++) {
+      const line = this._value[row];
+      let wrapped = this._memoizedWrap(line, this._width);
+      if (wrapped.length === 0) wrapped = [[]];
+      let base = 0;
+      for (const wrappedLine of wrapped) {
+        if (display === targetLine) {
+          const col = base + runeIndexForColumn(wrappedLine, contentX);
+          return { row, col: clamp(col, 0, line.length) };
+        }
+        base += wrappedLine.length;
+        display++;
+      }
+    }
+
+    const lastRow = this._value.length - 1;
+    return { row: lastRow, col: this._value[lastRow].length };
+  }
+
+  /**
+   * Starts a selection at the given textarea-relative coordinates, discarding
+   * any previous selection, and moves the cursor there. Pair it with
+   * {@link Model.extendSelection} as the pointer moves and
+   * {@link Model.endSelection} when the drag finishes.
+   *
+   * See {@link Model.positionAt} for the coordinate convention.
+   */
+  beginSelection(x: number, y: number): void {
+    const pos = this.positionAt(x, y);
+    this._selectFrom(pos, { ...pos });
+    this._selecting = true;
+    this._moveCursorTo(pos);
+  }
+
+  /**
+   * Extends an in-progress selection to the given textarea-relative
+   * coordinates and moves the cursor there. It is a no-op unless
+   * {@link Model.beginSelection} started a drag.
+   */
+  extendSelection(x: number, y: number): void {
+    if (!this._selecting) return;
+    const pos = this.positionAt(x, y);
+    this._selHead = pos;
+    this._hasSelection = true;
+    this._moveCursorTo(pos);
+  }
+
+  /**
+   * Completes an in-progress drag. The selection itself is retained so it can
+   * be read with {@link Model.selectedText}; a zero-width selection (a plain
+   * click) is discarded.
+   */
+  endSelection(): void {
+    this._selecting = false;
+    if (positionEqual(this._selAnchor, this._selHead)) {
+      this.clearSelection();
+    }
+  }
+
+  /** Selects the entire buffer. */
+  selectAll(): void {
+    if (this._value.length === 0) return;
+    const lastRow = this._value.length - 1;
+    this._selectFrom(
+      { row: 0, col: 0 },
+      { row: lastRow, col: this._value[lastRow].length },
+    );
+    this._selecting = false;
+  }
+
+  /** Removes the current selection, if any. */
+  clearSelection(): void {
+    this._hasSelection = false;
+    this._selecting = false;
+    this._selAnchor = { row: 0, col: 0 };
+    this._selHead = { row: 0, col: 0 };
+  }
+
+  /** Reports whether a non-empty selection is active. */
+  hasSelection(): boolean {
+    return this._hasSelection && !positionEqual(this._selAnchor, this._selHead);
+  }
+
+  /**
+   * Returns the selected range, normalized so start sorts before end, and
+   * whether a non-empty selection is active: `[start, end, ok]`.
+   */
+  selection(): [Position, Position, boolean] {
+    if (!this.hasSelection()) {
+      return [{ row: 0, col: 0 }, { row: 0, col: 0 }, false];
+    }
+    let start = { ...this._selAnchor };
+    let end = { ...this._selHead };
+    if (positionBefore(end, start)) [start, end] = [end, start];
+    return [start, end, true];
+  }
+
+  /**
+   * Returns the selected text, with logical lines joined by "\n". It returns
+   * the empty string when nothing is selected.
+   */
+  selectedText(): string {
+    const [start, end, ok] = this.selection();
+    if (!ok) return '';
+
+    if (start.row === end.row) {
+      const line = this._value[start.row];
+      return line.slice(clamp(start.col, 0, line.length), clamp(end.col, 0, line.length)).join('');
+    }
+
+    const parts: string[] = [];
+    for (let row = start.row; row <= end.row; row++) {
+      const line = this._value[row];
+      if (row === start.row) {
+        parts.push(line.slice(clamp(start.col, 0, line.length)).join(''));
+      } else if (row === end.row) {
+        parts.push(line.slice(0, clamp(end.col, 0, line.length)).join(''));
+      } else {
+        parts.push(line.join(''));
+      }
+    }
+    return parts.join('\n');
+  }
+
+  /**
+   * Deletes the currently selected text, positions the cursor at the start of
+   * the former selection, and clears the selection state. It is a no-op when
+   * there is no active selection.
+   */
+  deleteSelection(): void {
+    if (!this.hasSelection()) return;
+
+    const [start, end] = this.selection();
+
+    if (start.row === end.row) {
+      const line = this._value[start.row];
+      const endCol = Math.min(end.col, line.length);
+      const startCol = Math.min(start.col, endCol);
+      this._value[start.row] = [...line.slice(0, startCol), ...line.slice(endCol)];
+      this._row = start.row;
+      this.setCursorColumn(startCol);
+    } else {
+      const headLine = this._value[start.row];
+      const tailLine = this._value[end.row];
+      const endCol = Math.min(end.col, tailLine.length);
+      const startCol = Math.min(start.col, headLine.length);
+
+      const merged = [...headLine.slice(0, startCol), ...tailLine.slice(endCol)];
+      this._value = [
+        ...this._value.slice(0, start.row),
+        merged,
+        ...this._value.slice(end.row + 1),
+      ];
+
+      this._row = start.row;
+      this.setCursorColumn(startCol);
+    }
+
+    this.clearSelection();
+  }
+
+  /**
+   * Copies the selected text to the clipboard and returns a command that
+   * performs the copy. Returns null if there is no selection.
+   */
+  copySelection(): Cmd | null {
+    if (!this.hasSelection()) return null;
+    const text = this.selectedText();
+    return async (): Promise<Msg> => {
+      try {
+        await writeClipboard(text);
+        return { type: 'textarea.copy', content: text } satisfies CopyMsg;
+      } catch (error) {
+        return {
+          type: 'textarea.copyErr',
+          error: error instanceof Error ? error : new Error(String(error)),
+        } satisfies CopyErrMsg;
+      }
+    };
+  }
+
+  /** Begins a keyboard-driven selection at the cursor if none is active. */
+  private _startKeyboardSelection(): void {
+    if (!this._hasSelection) {
+      this._selAnchor = { row: this._row, col: this._col };
+    }
+    this._hasSelection = true;
+    this._selHead = { row: this._row, col: this._col };
+  }
+
+  /** Moves the selection head to the cursor after a keyboard movement. */
+  private _updateKeyboardSelection(): void {
+    this._selHead = { row: this._row, col: this._col };
+  }
+
+  /** Sets the selection anchor and head. */
+  private _selectFrom(anchor: Position, head: Position): void {
+    this._selAnchor = anchor;
+    this._selHead = head;
+    this._hasSelection = true;
+  }
+
+  /** Places the cursor at the given position, clamped to the buffer. */
+  private _moveCursorTo(pos: Position): void {
+    if (this._value.length === 0) return;
+    const row = clamp(pos.row, 0, this._value.length - 1);
+    this._row = row;
+    this._col = clamp(pos.col, 0, this._value[row].length);
+  }
+
+  /**
+   * Returns the half-open rune range [from, to) of the given logical row that
+   * is selected, restricted to the wrapped segment covering
+   * [base, base+length), relative to base. Returns null when the segment holds
+   * no selected runes.
+   */
+  private _selectionSpanFor(row: number, base: number, length: number): [number, number] | null {
+    const [start, end, active] = this.selection();
+    if (!active || row < start.row || row > end.row) return null;
+
+    const lineLen = this._value[row].length;
+    let rowFrom = 0;
+    let rowTo = lineLen;
+    if (row === start.row) rowFrom = clamp(start.col, 0, lineLen);
+    if (row === end.row) rowTo = clamp(end.col, 0, lineLen);
+
+    const from = Math.max(rowFrom, base);
+    const to = Math.min(rowTo, base + length);
+    if (from >= to) return null;
+    return [from - base, to - base];
   }
 
   // ── Memoized wrap ───────────────────────────────────────────────────────

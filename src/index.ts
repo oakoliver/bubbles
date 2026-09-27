@@ -214,6 +214,9 @@ export {
 export type {
   LineInfo,
   PromptInfo,
+  Position as TextareaPosition,
+  CopyMsg as TextareaCopyMsg,
+  CopyErrMsg as TextareaCopyErrMsg,
   KeyMap as TextareaKeyMap,
   CursorStyle as TextareaCursorStyle,
   StyleState as TextareaStyleState,
@@ -258,6 +261,39 @@ export type {
   KeyMap as FilePickerKeyMap,
   Styles as FilePickerStyles,
 } from './filepicker/filepicker.js';
+
+// ── Tree ────────────────────────────────────────────────────────────────────
+export {
+  Model as TreeModel,
+  newTree,
+  defaultKeyMap as treeDefaultKeyMap,
+} from './tree/tree.js';
+export type { KeyMap as TreeKeyMap } from './tree/tree.js';
+export {
+  Node as TreeNode,
+  Nodes as TreeNodes,
+  newNode as newTreeNode,
+  root as treeRoot,
+} from './tree/node.js';
+export {
+  defaultStyles as treeDefaultStyles,
+  defaultDarkStyles as treeDefaultDarkStyles,
+  defaultLightStyles as treeDefaultLightStyles,
+} from './tree/styles.js';
+export type {
+  Styles as TreeStyles,
+  StyleFunc as TreeStyleFunc,
+} from './tree/styles.js';
+export {
+  defaultEnumerator as treeDefaultEnumerator,
+  roundedEnumerator as treeRoundedEnumerator,
+  defaultIndenter as treeDefaultIndenter,
+} from './internal/ltree.js';
+export type {
+  Children as TreeChildren,
+  Enumerator as TreeEnumerator,
+  Indenter as TreeIndenter,
+} from './internal/ltree.js';
 
 // ── Internal: ANSI utilities ────────────────────────────────────────────────
 export {

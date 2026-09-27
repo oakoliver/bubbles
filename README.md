@@ -5,7 +5,8 @@ Pre-built TUI components for TypeScript. A pure TypeScript port of [charmbracele
 Built on top of [@oakoliver/bubbletea](https://www.npmjs.com/package/@oakoliver/bubbletea) (Elm Architecture) and [@oakoliver/lipgloss](https://www.npmjs.com/package/@oakoliver/lipgloss) (terminal styling).
 
 Portable API and behavior parity is tracked against upstream
-[`charmbracelet/bubbles` `v2.1.1`](https://github.com/charmbracelet/bubbles/releases/tag/v2.1.1).
+[`charmbracelet/bubbles` `v2.2.1`](https://github.com/charmbracelet/bubbles/releases/tag/v2.2.1)
+(upstream `main` has no behavioral changes since). See [CHANGELOG.md](CHANGELOG.md).
 The one platform-specific exclusion is upstream's unexported Windows
 `isHidden(path)` implementation in `filepicker/hidden_windows.go`: Node's
 portable filesystem API does not expose `FILE_ATTRIBUTE_HIDDEN`, so the file
@@ -13,7 +14,7 @@ picker uses the Unix dotfile convention on every platform.
 
 ## Features
 
-- 15 ready-to-use TUI components
+- 16 ready-to-use TUI components
 - Zero runtime dependencies (peer dependencies on lipgloss + bubbletea)
 - Full Elm Architecture: each component has `update(msg)` and `view()`
 - Keybinding system with help text generation
@@ -32,7 +33,7 @@ npm install @oakoliver/bubbles @oakoliver/lipgloss @oakoliver/bubbletea
 | Component | Description |
 |-----------|-------------|
 | **TextInput** | Single-line text input with cursor, echo modes, suggestions, and completion |
-| **TextArea** | Multi-line text editor with word wrapping, line numbers, and soft wrap |
+| **TextArea** | Multi-line text editor with word wrapping, line numbers, soft wrap, and keyboard/mouse text selection |
 
 ### Display
 
@@ -50,6 +51,7 @@ npm install @oakoliver/bubbles @oakoliver/lipgloss @oakoliver/bubbletea
 | **List** | Full-featured list browser with fuzzy filtering, pagination, and customizable delegates |
 | **Paginator** | Page navigation with Arabic (1/5) or Dots (●○○) display |
 | **FilePicker** | File system browser using Node.js `fs` |
+| **Tree** | Collapsible tree browser with scroll-off, multi-line nodes, and custom enumerators |
 
 ### Utility
 
@@ -103,7 +105,7 @@ const value = input.value();
 ### Text Area
 
 ```typescript
-import { TextAreaModel, newTextarea } from '@oakoliver/bubbles';
+import { TextareaModel, newTextarea } from '@oakoliver/bubbles';
 
 const ta = newTextarea();
 ta.placeholder = 'Enter your message...';
@@ -113,6 +115,20 @@ ta.focus();
 
 const view = ta.view();
 const [updated, cmd] = ta.update(msg);
+```
+
+Selection: `shift+←/→/↑/↓` select by character/line, `ctrl+shift+←/→` (or
+`alt+shift+←/→`) by word, `ctrl+g` selects all and `ctrl+shift+c` copies to the
+system clipboard. Typing, pasting, enter and the delete keys replace the
+selection. Pointer-driven selection is exposed for mouse handlers:
+
+```typescript
+// x/y are relative to the textarea's top-left cell (gutter included).
+ta.beginSelection(x, y);   // on mouse press
+ta.extendSelection(x, y);  // on mouse motion
+ta.endSelection();         // on mouse release
+ta.selectedText();         // "selected\ntext"
+const cmd = ta.copySelection(); // Cmd writing to the clipboard, or null
 ```
 
 ### Progress Bar
@@ -169,6 +185,28 @@ class MyItem implements ListItem {
 
 const list = newList(items, delegate, 80, 24);
 const view = list.view();
+```
+
+### Tree
+
+```typescript
+import { newTree, treeRoot, treeRoundedEnumerator } from '@oakoliver/bubbles';
+
+const tree = newTree(
+  treeRoot('~/charm').child(
+    'ayman',
+    treeRoot('bash').child(treeRoot('tools').child('zsh', 'doom-emacs')),
+    'maas',
+  ),
+  70, // width
+  13, // height (including the help line)
+);
+tree.enumerator(treeRoundedEnumerator);
+
+// ↑/↓ (k/j) move, enter toggles, →/l opens, ←/h closes, ? toggles help.
+const [updated, cmd] = tree.update(msg);
+tree.nodeAtCurrentOffset()?.givenValue(); // the value you passed in
+const view = tree.view();
 ```
 
 ### Help

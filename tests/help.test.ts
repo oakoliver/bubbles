@@ -45,6 +45,8 @@ describe('TestFullHelp', () => {
 
     // At 20 width, should be truncated (not all columns fit)
     expect(stringWidth(s)).toBeLessThanOrEqual(20);
+    // Upstream golden: full_help_20_width.golden
+    expect(s).toBe('enter continue …');
     // Should contain at least the first column
     expect(s).toContain('enter');
     expect(s).toContain('continue');
@@ -56,7 +58,8 @@ describe('TestFullHelp', () => {
     m.setWidth(30);
     const s = stripAnsi(m.fullHelpView(kb));
 
-    expect(stringWidth(s)).toBeLessThanOrEqual(30);
+    // Upstream golden: full_help_30_width.golden
+    expect(s).toBe('enter continue | esc back …\n                 ?   help  ');
     // Should contain first column
     expect(s).toContain('enter');
     expect(s).toContain('continue');
@@ -76,6 +79,12 @@ describe('TestFullHelp', () => {
     // Should have at least the second column too
     expect(s).toContain('esc');
     expect(s).toContain('back');
+    // Upstream golden: full_help_40_width.golden
+    expect(s).toBe([
+      'enter continue | esc back | H      home',
+      '                 ?   help   ctrl+c quit',
+      '                            ctrl+l log ',
+    ].join('\n'));
   });
 
   test('full help unlimited width', () => {

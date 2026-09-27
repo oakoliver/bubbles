@@ -9,7 +9,7 @@
  */
 
 import type { Cmd, Msg } from '@oakoliver/bubbletea';
-import { newStyle, stringWidth, joinHorizontal, Top } from '@oakoliver/lipgloss';
+import { newStyle, stringWidth, width as lipglossWidth, joinHorizontal, Top } from '@oakoliver/lipgloss';
 import type { Style } from '@oakoliver/lipgloss';
 import type { Binding } from '../key/key.js';
 
@@ -216,7 +216,8 @@ export class Model {
         ' ',
         this.styles.fullDesc.render(descriptions.join('\n')),
       );
-      const w = stringWidth(col);
+      // Multi-line column: measure the widest line (lipgloss.Width).
+      const w = lipglossWidth(col);
 
       // Check if it fits
       const [tail, ok] = this._shouldAddItem(totalWidth, w);

@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { WindowSizeMsg } from '@oakoliver/bubbletea';
+import { KeyCode, KeyMod, KeyPressMsg, WindowSizeMsg } from '@oakoliver/bubbletea';
 import { newFilePicker } from '../src/filepicker/filepicker.js';
 
 const temporaryDirectories: string[] = [];
@@ -91,3 +91,99 @@ describe('file picker v2 parity', () => {
   });
 });
 
+// ── v2.2.0 parity: filepicker/filepicker_test.go ────────────────────────────
+
+/** Creates a directory containing a subdirectory with a file in it. */
+function newTestDir(): string {
+  const root = mkdtempSync(join(tmpdir(), 'bubbles-filepicker-v22-'));
+  temporaryDirectories.push(root);
+  mkdirSync(join(root, 'subdir'));
+  writeFileSync(join(root, 'subdir', 'file.go'), 'package main');
+  return root;
+}
+
+/** Sends msg to the model and feeds the resulting command's message back. */
+async function step(picker: ReturnType<typeof newFilePicker>, msg: unknown) {
+  const [, cmd] = picker.update(msg as any);
+  if (cmd) picker.update(await cmd() as any);
+  return picker;
+}
+
+const keyL = () => new KeyPressMsg({ code: 'l'.codePointAt(0)!, text: 'l', mod: KeyMod.None });
+const keyEnter = () => new KeyPressMsg({ code: KeyCode.Enter, text: '', mod: KeyMod.None });
+
+describe('file picker v2.2.0 parity', () => {
+  test('navigates without a WindowSizeMsg and never renders a blank view', async () => {
+    const picker = newFilePicker();
+    picker.currentDirectory = newTestDir();
+
+    await step(picker, await picker.init()());
+    expect(picker.view()).toContain('subdir');
+
+    await step(picker, keyL());
+    expect(picker.currentDirectory.endsWith('subdir')).toBe(true);
+    expect(picker['_maxIdx']).toBeGreaterThanOrEqual(picker['_minIdx']);
+    expect(picker.view()).toContain('file.go');
+  });
+
+  test('a selection is only reported once a path was actually selected', async () => {
+    const picker = newFilePicker();
+    picker.currentDirectory = join(newTestDir(), 'subdir');
+    picker.allowedTypes = ['.txt'];
+
+    await step(picker, await picker.init()());
+
+    expect(picker.didSelectFile(keyEnter())).toEqual([false, '']);
+    expect(picker.didSelectDisabledFile(keyEnter())).toEqual([false, '']);
+
+    picker.allowedTypes = ['.go'];
+    await step(picker, keyEnter());
+    const [didSelect, selectedPath] = picker.didSelectFile(keyEnter());
+    expect(didSelect).toBe(true);
+    expect(selectedPath.endsWith('file.go')).toBe(true);
+  });
+
+  test('a disallowed directory never reports a stale path', async () => {
+    const picker = newFilePicker();
+    picker.currentDirectory = newTestDir();
+    picker.dirAllowed = false;
+    picker.path = '/stale/path';
+    await step(picker, await picker.init()());
+    // The highlighted entry is a directory and directories are not allowed.
+    expect(picker.didSelectFile(keyEnter())).toEqual([false, '']);
+    expect(picker.didSelectDisabledFile(keyEnter())).toEqual([false, '']);
+  });
+
+  test('go-to-last and page-down never produce a negative minIdx', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bubbles-filepicker-idx-'));
+    temporaryDirectories.push(directory);
+    for (const name of ['a', 'b', 'c']) writeFileSync(join(directory, name), name);
+
+    const { picker } = await initialize(directory); // height 5 > 3 files
+    picker.update(new KeyPressMsg({ code: 'G'.codePointAt(0)!, text: 'G', mod: KeyMod.None }));
+    expect(picker['_minIdx']).toBe(0);
+    expect(picker['_maxIdx']).toBe(2);
+    expect(picker.view()).toContain('a');
+
+    picker.update(new KeyPressMsg({ code: 'g'.codePointAt(0)!, text: 'g', mod: KeyMod.None }));
+    picker.update(new KeyPressMsg({ code: KeyCode.PgDown, text: '', mod: KeyMod.None }));
+    expect(picker['_minIdx']).toBe(0);
+    expect(picker['_maxIdx']).toBe(2);
+    const view = picker.view();
+    for (const name of ['a', 'b', 'c']) expect(view).toContain(name);
+  });
+
+  test('zero height shows exactly one entry after go-to-top', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bubbles-filepicker-h0-'));
+    temporaryDirectories.push(directory);
+    for (const name of ['one', 'two']) writeFileSync(join(directory, name), name);
+
+    const picker = newFilePicker();
+    picker.currentDirectory = directory;
+    await step(picker, await picker.init()());
+    picker.update(new KeyPressMsg({ code: 'g'.codePointAt(0)!, text: 'g', mod: KeyMod.None }));
+    expect(picker['_minIdx']).toBe(0);
+    expect(picker['_maxIdx']).toBe(0);
+    expect(picker.view()).toContain('one');
+  });
+});

@@ -464,10 +464,7 @@ export class Model {
     const contentHeight = h - this.style.getVerticalFrameSize();
 
     const visLines = this._visibleLines();
-    const contents = newStyle()
-      .width(contentWidth)
-      .height(contentHeight)
-      .render(visLines.join('\n'));
+    const contents = renderBlock(visLines, contentWidth, contentHeight);
 
     return this.style
       .unsetWidth()
@@ -674,6 +671,24 @@ export function newViewport(...opts: Option[]): Model {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Equivalent of `lipgloss.NewStyle().Width(w).Height(h).Render(lines)`.
+ *
+ * Upstream relies on lipgloss' wrapper preserving leading whitespace on each
+ * line. `@oakoliver/lipgloss` 1.1.0 drops leading whitespace when a width is
+ * set, which would eat indentation (e.g. the tree component's cursor column),
+ * so lines that already fit are padded here directly; anything wider falls
+ * back to lipgloss' wrapping.
+ */
+function renderBlock(lines: string[], width: number, height: number): string {
+  if (width <= 0 || lines.some((line) => line.includes('\n') || ansiStringWidth(line) > width)) {
+    return newStyle().width(width).height(height).render(lines.join('\n'));
+  }
+  const out = lines.map((line) => line + ' '.repeat(width - ansiStringWidth(line)));
+  while (out.length < height) out.push(' '.repeat(width));
+  return out.join('\n');
+}
 
 function clamp(v: number, low: number, high: number): number {
   if (high < low) { [low, high] = [high, low]; }

@@ -251,8 +251,15 @@ describe('v2 list parity', () => {
     const list = newList(items, testDelegate, 40, 12);
     expect(list.keyMap.prevPage.keys()).toContain('pgup');
     expect(list.keyMap.nextPage.keys()).toContain('pgdown');
-    expect(list.keyMap.quit.keys()).toContain('esc');
     expect(list.width()).toBe(40);
     expect(list.height()).toBe(12);
+  });
+
+  test('default quit binding stays "q" / "esc" (upstream bug #1045)', () => {
+    const list = newList([new TestItem('foo')], testDelegate, 40, 12);
+    expect(list.keyMap.quit.keys()).toEqual(['q', 'esc']);
+    expect(list.keyMap.quit.help()).toEqual({ key: 'q', desc: 'quit' });
+    expect(list.keyMap.quit.keys()).not.toContain('v');
+    expect(list.keyMap.forceQuit.keys()).toEqual(['ctrl+c']);
   });
 });

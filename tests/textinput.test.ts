@@ -414,3 +414,26 @@ describe('Real cursor parity', () => {
     expect(ti.cursor()?.x).toBe(2);
   });
 });
+
+// ── v2.2.0 parity: ctrl+backspace / ctrl+delete (#1020) ─────────────────────
+
+describe('textinput v2.2.0 word deletion keys', () => {
+  test('default key map includes ctrl+backspace and ctrl+delete', async () => {
+    const { defaultKeyMap } = await import('../src/textinput/textinput.js');
+    const km = defaultKeyMap();
+    expect(km.deleteWordBackward.keys()).toEqual(['alt+backspace', 'ctrl+w', 'ctrl+backspace']);
+    expect(km.deleteWordForward.keys()).toEqual(['alt+delete', 'alt+d', 'ctrl+delete']);
+  });
+
+  test('ctrl+backspace deletes the previous word; ctrl+delete the next', async () => {
+    const { KeyCode, KeyMod, KeyPressMsg } = await import('@oakoliver/bubbletea');
+    const ti = newTextInput();
+    ti.focus();
+    ti.setValue('alpha beta gamma');
+    ti.update(new KeyPressMsg({ code: KeyCode.Backspace, text: '', mod: KeyMod.Ctrl }));
+    expect(ti.value()).toBe('alpha beta ');
+    ti.cursorStart();
+    ti.update(new KeyPressMsg({ code: KeyCode.Delete, text: '', mod: KeyMod.Ctrl }));
+    expect(ti.value()).toBe(' beta ');
+  });
+});

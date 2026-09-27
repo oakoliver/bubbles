@@ -270,8 +270,18 @@ export class Model {
   setHeight(h: number): void {
     this._height = h;
     if (this._maxIdx > this._height - 1) {
-      this._maxIdx = this._minIdx + this._height - 1;
+      this._maxIdx = this._bottomIdx(this._minIdx);
     }
+  }
+
+  /**
+   * Returns the index of the last visible entry for a viewport whose first
+   * visible entry is `top`. If the height has not been set yet, one entry is
+   * shown so that the view is never blank.
+   */
+  private _bottomIdx(top: number): number {
+    if (this._height < 1) return top;
+    return top + this._height - 1;
   }
 
   height(): number { return this._height; }
@@ -330,7 +340,7 @@ export class Model {
       if (rdm.id !== this._id) return [this, null];
       this.error = null;
       this._files = rdm.entries;
-      this._maxIdx = Math.max(this._maxIdx, this._height - 1);
+      this._maxIdx = Math.max(this._maxIdx, this._bottomIdx(this._minIdx));
       return [this, null];
     }
 
@@ -342,7 +352,7 @@ export class Model {
       this._files = [];
       this._selected = 0;
       this._minIdx = 0;
-      this._maxIdx = Math.max(0, this._height - 1);
+      this._maxIdx = this._bottomIdx(0);
       return [this, null];
     }
 
@@ -351,7 +361,7 @@ export class Model {
       const height = m.height;
       if (typeof height !== 'number') return [this, null];
       if (this.autoHeight) this.setHeight(height - marginBottom);
-      this._maxIdx = this._height - 1;
+      this._maxIdx = this._bottomIdx(this._minIdx);
       return [this, null];
     }
 
@@ -360,10 +370,10 @@ export class Model {
       if (matches(msg, this.keyMap.goToTop)) {
         this._selected = 0;
         this._minIdx = 0;
-        this._maxIdx = this._height - 1;
+        this._maxIdx = this._bottomIdx(0);
       } else if (matches(msg, this.keyMap.goToLast)) {
         this._selected = this._files.length - 1;
-        this._minIdx = this._files.length - this._height;
+        this._minIdx = Math.max(this._files.length - this._height, 0);
         this._maxIdx = this._files.length - 1;
       } else if (matches(msg, this.keyMap.down)) {
         this._selected++;
@@ -390,7 +400,7 @@ export class Model {
         this._maxIdx += this._height;
         if (this._maxIdx >= this._files.length) {
           this._maxIdx = this._files.length - 1;
-          this._minIdx = this._maxIdx - this._height;
+          this._minIdx = Math.max(this._maxIdx - this._height, 0);
         }
       } else if (matches(msg, this.keyMap.pageUp)) {
         this._selected -= this._height;
@@ -408,7 +418,7 @@ export class Model {
         } else {
           this._selected = 0;
           this._minIdx = 0;
-          this._maxIdx = this._height - 1;
+          this._maxIdx = this._bottomIdx(0);
         }
         return [this, this._readDirCmd(this.currentDirectory, this.showHidden)];
       } else if (matches(msg, this.keyMap.open)) {
@@ -440,7 +450,7 @@ export class Model {
         this._pushView(this._selected, this._minIdx, this._maxIdx);
         this._selected = 0;
         this._minIdx = 0;
-        this._maxIdx = this._height - 1;
+        this._maxIdx = this._bottomIdx(0);
         return [this, this._readDirCmd(this.currentDirectory, this.showHidden)];
       }
     }
@@ -569,8 +579,8 @@ export class Model {
       }
     }
 
-    if ((!isDir && this.fileAllowed) || (isDir && this.dirAllowed)) {
-      if (this.path !== '') return [true, this.path];
+    if (((!isDir && this.fileAllowed) || (isDir && this.dirAllowed)) && this.path !== '') {
+      return [true, this.path];
     }
 
     return [false, ''];

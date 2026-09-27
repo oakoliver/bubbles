@@ -192,6 +192,8 @@ export function defaultKeyMap(): KeyMap {
       withKeys('?'),
       withHelp('?', 'close help'),
     ),
+    // Upstream v2.2.0 (charmbracelet/bubbles#893) accidentally rebound Quit to
+    // "v"/"select" (bug #1045, fix in PR #1046); we keep the intended keys.
     quit: newBinding(
       withKeys('q', 'esc'),
       withHelp('q', 'quit'),

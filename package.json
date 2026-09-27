@@ -1,6 +1,6 @@
 {
   "name": "@oakoliver/bubbles",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Pre-built TUI components for TypeScript — zero-dependency port of Charmbracelet's Bubbles",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -42,6 +42,7 @@
     "progress",
     "list",
     "filepicker",
+    "tree",
     "cli",
     "typescript"
   ],
