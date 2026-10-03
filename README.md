@@ -70,18 +70,18 @@ import {
   SpinnerModel, newSpinner, Line,
   ProgressModel, newProgress,
   TextInputModel, newTextInput,
-  ViewportModel, newViewport, withWidth, withHeight,
+  ViewportModel, newViewport, withViewportWidth, withViewportHeight,
 } from '@oakoliver/bubbles';
 ```
 
 ### Spinner
 
 ```typescript
-import { SpinnerModel, newSpinner, Dot } from '@oakoliver/bubbles';
+import { SpinnerModel, newSpinner, withSpinner, Dot } from '@oakoliver/bubbles';
 import type { Msg, Cmd } from '@oakoliver/bubbletea';
 
-const spinner = newSpinner(Dot);
-const view = spinner.view(); // "⣾"
+const spinner = newSpinner(withSpinner(Dot));
+const view = spinner.view(); // "⣾ "
 
 // In your update loop:
 const [updated, cmd] = spinner.update(msg);
@@ -137,16 +137,22 @@ const cmd = ta.copySelection(); // Cmd writing to the clipboard, or null
 import { ProgressModel, newProgress } from '@oakoliver/bubbles';
 
 const bar = newProgress();
-bar.setPercent(0.75);
-const view = bar.view(); // "████████████████████░░░░░░░"
+
+// Static render at a given percentage:
+bar.viewAs(0.75); // "▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌░░░░░░░░░  75%"
+
+// Animated: setPercent returns a Cmd that drives the spring animation;
+// return it from your update and pass the resulting frame messages back.
+const cmd = bar.setPercent(0.75);
+const view = bar.view();
 ```
 
 ### Viewport
 
 ```typescript
-import { ViewportModel, newViewport, withWidth, withHeight } from '@oakoliver/bubbles';
+import { ViewportModel, newViewport, withViewportWidth, withViewportHeight } from '@oakoliver/bubbles';
 
-const vp = newViewport(withWidth(80), withHeight(24));
+const vp = newViewport(withViewportWidth(80), withViewportHeight(24));
 vp.setContent(longString);
 
 const view = vp.view();
@@ -156,17 +162,20 @@ const [updated, cmd] = vp.update(msg);
 ### Table
 
 ```typescript
-import { TableModel, newTable, withTableColumns, withTableRows } from '@oakoliver/bubbles';
+import { TableModel, newTable, withColumns, withRows, withTableWidth, withTableHeight } from '@oakoliver/bubbles';
 
 const table = newTable(
-  withTableColumns([
+  withColumns([
     { title: 'Name', width: 20 },
     { title: 'Age', width: 5 },
   ]),
-  withTableRows([
+  withRows([
     ['Alice', '30'],
     ['Bob', '25'],
   ]),
+  // As in upstream v2, rows only render once the table has a width.
+  withTableWidth(29),
+  withTableHeight(5),
 );
 table.focus();
 const view = table.view();
@@ -175,15 +184,22 @@ const view = table.view();
 ### List
 
 ```typescript
-import { ListModel, newList } from '@oakoliver/bubbles';
-import type { ListItem, ListItemDelegate } from '@oakoliver/bubbles';
+import { newList, newListDefaultDelegate } from '@oakoliver/bubbles';
+import type { ListDefaultItem } from '@oakoliver/bubbles';
 
-class MyItem implements ListItem {
-  constructor(public name: string) {}
+// The default delegate renders a title and a description.
+class MyItem implements ListDefaultItem {
+  constructor(public name: string, public detail: string) {}
+  title() { return this.name; }
+  description() { return this.detail; }
   filterValue() { return this.name; }
 }
 
-const list = newList(items, delegate, 80, 24);
+const items = [
+  new MyItem('Raspberry Pi’s', 'I have ’em all over my house'),
+  new MyItem('Nutella', 'It’s good on toast'),
+];
+const list = newList(items, newListDefaultDelegate(), 80, 24);
 const view = list.view();
 ```
 
@@ -227,29 +243,31 @@ help.view(keyMap); // "q quit"
 ### Keybindings
 
 ```typescript
-import { Binding, newBinding, withKeys, withHelp, withDisabled, matches } from '@oakoliver/bubbles';
+import { newBinding, withKeys, withHelp, matches } from '@oakoliver/bubbles';
+import { KeyPressMsg, Quit, type Cmd, type Msg } from '@oakoliver/bubbletea';
 
 const quit = newBinding(
   withKeys('q', 'ctrl+c'),
   withHelp('q', 'quit'),
 );
 
-// In update():
-if (matches(msg, quit)) {
-  return [model, Quit];
+// In your model's update():
+function update(msg: Msg): Cmd {
+  if (msg instanceof KeyPressMsg && matches(msg, quit)) return Quit;
+  return null;
 }
 ```
 
 ### Paginator
 
 ```typescript
-import { PaginatorModel, newPaginator, Arabic, Dots } from '@oakoliver/bubbles';
+import { PaginatorModel, newPaginator, PaginatorType } from '@oakoliver/bubbles';
 
 const pager = newPaginator();
-pager.type = Dots;
+pager.type = PaginatorType.Dots; // or PaginatorType.Arabic for "3/5"
 pager.totalPages = 5;
 pager.page = 2;
-pager.view(); // "○ ○ ● ○ ○"
+pager.view(); // "○○•○○"
 ```
 
 ### Timer & Stopwatch
@@ -291,14 +309,16 @@ save.setEnabled(false);
 Every component follows the Bubbletea Elm Architecture:
 
 ```typescript
-// Create
-const model = newComponent(options);
+import { newSpinner } from '@oakoliver/bubbles';
+
+// Create (each component has a new*() constructor taking options)
+const model = newSpinner();
 
 // Update on each message
 const [updated, cmd] = model.update(msg);
 
 // Render
-const output = model.view();
+const output = updated.view();
 ```
 
 Components are immutable-style — `update()` returns a `[Model, Cmd | null]` tuple.
