@@ -263,3 +263,19 @@ describe('v2 list parity', () => {
     expect(list.keyMap.forceQuit.keys()).toEqual(['ctrl+c']);
   });
 });
+
+// ── Pagination type ─────────────────────────────────────────────────────────
+
+describe('Pagination', () => {
+  test('falling back to arabic when too narrow does not stick', () => {
+    const items = Array.from({ length: 30 }, (_, i) => new TestItem(`item ${i}`));
+    const list = newList(items, testDelegate, 40, 10);
+    // A size too narrow for the dots (e.g. a 0-width WindowSizeMsg before
+    // the real one) must not leave the list on arabic pagination.
+    list.setSize(0, 10);
+    list.setSize(40, 10);
+    const view = stripAnsi(list.view());
+    expect(view).toContain('•');
+    expect(view).not.toMatch(/\d+\/\d+/);
+  });
+});

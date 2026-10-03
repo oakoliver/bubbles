@@ -1482,10 +1482,15 @@ export class Model {
 
     let s = this.paginator.view();
 
-    // If dot pagination is wider than window, use arabic
+    // If dot pagination is wider than window, use arabic for this render
+    // only. Upstream mutates a copy of the model (value receiver), so the
+    // switch must not stick; otherwise an early render at width 0 would
+    // leave the list on arabic pagination for good.
     if (stringWidth(s) > this._width) {
+      const type = this.paginator.type;
       this.paginator.type = PaginatorType.Arabic;
       s = this.styles.arabicPagination.render(this.paginator.view());
+      this.paginator.type = type;
     }
 
     let style = this.styles.paginationStyle;
