@@ -12,6 +12,8 @@ The one platform-specific exclusion is upstream's unexported Windows
 portable filesystem API does not expose `FILE_ATTRIBUTE_HIDDEN`, so the file
 picker uses the Unix dotfile convention on every platform.
 
+<img alt="The list component from @oakoliver/bubbles: browsing 'My Fave Things', then fuzzy-filtering with / to items matching 'te'" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/list.gif" width="600">
+
 ## Features
 
 - 16 ready-to-use TUI components
@@ -63,6 +65,21 @@ npm install @oakoliver/bubbles @oakoliver/lipgloss @oakoliver/bubbletea
 | **Timer** | Countdown timer with start/stop/toggle |
 | **Stopwatch** | Count-up stopwatch with start/stop/toggle/reset |
 
+## Examples
+
+Runnable programs live in [`examples/`](examples/):
+
+```bash
+bun examples/list.ts       # list with fuzzy filtering
+bun examples/spinners.ts   # every built-in spinner
+bun examples/textinput.ts  # suggestions and a masked field
+bun examples/progress.ts   # animated progress bar
+bun examples/table.ts      # navigable table
+bun examples/ide.ts        # tree file explorer + textarea editor
+```
+
+The README recordings are made with [@oakoliver/vhs](https://github.com/oakoliver/vhs) from the tapes in [`assets/tapes/`](assets/tapes/).
+
 ## Quick Start
 
 ```typescript
@@ -87,6 +104,8 @@ const view = spinner.view(); // "⣾ "
 const [updated, cmd] = spinner.update(msg);
 ```
 
+<img alt="All twelve built-in spinners animating: Line, Dot, MiniDot, Jump, Pulse, Points, Globe, Moon, Monkey, Meter, Hamburger and Ellipsis" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/spinners.gif" width="600">
+
 ### Text Input
 
 ```typescript
@@ -101,6 +120,8 @@ const view = input.view();
 const [updated, cmd] = input.update(msg);
 const value = input.value();
 ```
+
+<img alt="A text input completing 'charmbracelet/bu' from suggestions, then a masked token field" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/textinput.gif" width="600">
 
 ### Text Area
 
@@ -147,6 +168,8 @@ const cmd = bar.setPercent(0.75);
 const view = bar.view();
 ```
 
+<img alt="A gradient progress bar springing from 0% to 100% in 25% steps" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/progress.gif" width="600">
+
 ### Viewport
 
 ```typescript
@@ -180,6 +203,8 @@ const table = newTable(
 table.focus();
 const view = table.view();
 ```
+
+<img alt="A table of the world's most populous cities with the selected row moving down and back up" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/table.gif" width="440">
 
 ### List
 
@@ -224,6 +249,8 @@ const [updated, cmd] = tree.update(msg);
 tree.nodeAtCurrentOffset()?.givenValue(); // the value you passed in
 const view = tree.view();
 ```
+
+<img alt="examples/ide.ts: a tree file explorer expanding src/pomo and opening cli.py in a textarea editor, then selecting all 64 lines" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/ide.gif" width="760">
 
 ### Help
 

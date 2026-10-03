@@ -1,5 +1,21 @@
 # Examples
 
+## Small programs
+
+Single-file programs, one component each. The README recordings are made from
+them with the tapes in `assets/tapes/`.
+
+```sh
+bun examples/list.ts       # list with fuzzy filtering
+bun examples/spinners.ts   # every built-in spinner
+bun examples/textinput.ts  # suggestions and a masked field
+bun examples/progress.ts   # animated progress bar
+bun examples/table.ts      # navigable table
+```
+
+They import this repository's source and `@oakoliver/bubbletea` and
+`@oakoliver/lipgloss` by name; see the `ide.ts` dependency notes below.
+
 ## ide.ts
 
 A two-pane terminal "IDE": the tree component as a file explorer and the
