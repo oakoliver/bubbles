@@ -14,6 +14,8 @@ picker uses the Unix dotfile convention on every platform.
 
 <img alt="The list component from @oakoliver/bubbles: browsing 'My Fave Things', then fuzzy-filtering with / to items matching 'te'" src="https://raw.githubusercontent.com/oakoliver/bubbles/main/assets/list.gif" width="600">
 
+**Read the article:** [Getting Started with Bubbles](https://engineering.oakoliver.com/articles/getting-started-bubbles-typescript-tui-components) · [Porting Bubbles from Go to TypeScript](https://engineering.oakoliver.com/articles/porting-go-bubbles-to-typescript-15-tui-components-zero-dependencies)
+
 ## Features
 
 - 16 ready-to-use TUI components
